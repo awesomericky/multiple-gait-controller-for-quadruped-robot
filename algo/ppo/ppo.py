@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 from .storage import RolloutStorage
+import numpy as np
 
 
 class PPO:
@@ -98,6 +99,12 @@ class PPO:
         self.writer.add_scalar('Loss/value_function', variables['mean_value_loss'], variables['it'])
         self.writer.add_scalar('Loss/surrogate', variables['mean_surrogate_loss'], variables['it'])
         self.writer.add_scalar('Policy/mean_noise_std', mean_std.item(), variables['it'])
+
+    def extra_log(self, log_value, step):
+        self.writer.add_scalar('Reward/torque/mean', np.mean(log_value[0]), step)
+        self.writer.add_scalar('Reward/torque/std', np.std(log_value[0]), step)
+        self.writer.add_scalar('Reward/velocity/mean', np.mean(log_value[1]), step)
+        self.writer.add_scalar('Reward/velocity/std', np.std(log_value[1]), step)
 
     def _train_step(self):
         mean_value_loss = 0

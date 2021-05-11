@@ -20,7 +20,8 @@ class ENVIRONMENT : public RaisimGymEnv {
       RaisimGymEnv(resourceDir, cfg), visualizable_(visualizable) {
 
     /// add objects
-    anymal_ = world_->addArticulatedSystem(resourceDir_+"/anymal/urdf/anymal.urdf");
+    // anymal_ = world_->addArticulatedSystem(resourceDir_+"/anymal/urdf/anymal.urdf");
+    anymal_ = world_->addArticulatedSystem(resourceDir_+"/laikago/laikago.urdf");
     anymal_->setName("anymal");
     anymal_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
     world_->addGround();
@@ -42,14 +43,21 @@ class ENVIRONMENT : public RaisimGymEnv {
     /// desired velocity
     desired_velocity = cfg["velocity"].As<double>();
 
+    /// reward constant
+    reward_torque_coeff = cfg["reward"]["torque"]["coeff"].As<double>();
+    reward_velocity_coeff = cfg["reward"]["forwardVel_difference"]["coeff"].As<double>();
+
     /// this is nominal configuration of anymal
-    gc_init_ << 0, 0, 0.50, 1.0, 0.0, 0.0, 0.0, 0.4, -0.8, 0.4, -0.8, -0.4, 0.8, -0.4, 0.8;
+    // gc_init_ << 0, 0, 0.50, 1.0, 0.0, 0.0, 0.0, 0.4, -0.8, 0.4, -0.8, -0.4, 0.8, -0.4, 0.8;
     // gc_init_ << 0, 0, 0.50, 1.0, 0.0, 0.0, 0.0, 0.03, 0.4, -0.8, -0.03, 0.4, -0.8, 0.03, -0.4, 0.8, -0.03, -0.4, 0.8;
+
+    // initialize for laikago
+    gc_init_ << 0, 0, 0.46, 1, 0.0, 0.0, 0.0, 0.5, -1, 0.5, -1, 0.5, -1, 0.5, -1;
 
     /// set pd gains
     Eigen::VectorXd jointPgain(gvDim_), jointDgain(gvDim_);
-    jointPgain.setZero(); jointPgain.tail(nJoints_).setConstant(50.0);
-    jointDgain.setZero(); jointDgain.tail(nJoints_).setConstant(0.2);
+    jointPgain.setZero(); jointPgain.tail(nJoints_).setConstant(40.0); //20.0
+    jointDgain.setZero(); jointDgain.tail(nJoints_).setConstant(1.0); //0.2
     anymal_->setPdGains(jointPgain, jointDgain);
     anymal_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
@@ -66,10 +74,11 @@ class ENVIRONMENT : public RaisimGymEnv {
     rewards_.initializeFromConfigurationFile (cfg["reward"]);
 
     /// indices of links that should not make contact with ground
-    footIndices_.insert(anymal_->getBodyIdx("LF_SHANK"));
-    footIndices_.insert(anymal_->getBodyIdx("RF_SHANK"));
-    footIndices_.insert(anymal_->getBodyIdx("LH_SHANK"));
-    footIndices_.insert(anymal_->getBodyIdx("RH_SHANK"));
+    footIndices_.insert(anymal_->getBodyIdx("FR_calf"));
+    footIndices_.insert(anymal_->getBodyIdx("FL_calf"));
+    footIndices_.insert(anymal_->getBodyIdx("RR_calf"));
+    footIndices_.insert(anymal_->getBodyIdx("RL_calf"));
+    // footIndices_.insert(anymal_->getBodyIdx("trunk"));
 
     /// visualize if it is the first environment
     if (visualizable_) {
@@ -105,12 +114,18 @@ class ENVIRONMENT : public RaisimGymEnv {
 
     rewards_.record("torque", anymal_->getGeneralizedForce().squaredNorm());
     // velocity = std::pow(std::pow(bodyLinearVel_[0], 2) + std::pow(bodyLinearVel_[1], 2), 0.5);
-    velocity = std::min(4.0, bodyLinearVel_[0]);
-    rewards_.record("forwardVel_difference", std::exp( - 10 *  std::pow(velocity - desired_velocity, 2)));
-    // std::cout << velocity;
+    // velocity = std::min(4.0, bodyLinearVel_[0]);
+    rewards_.record("forwardVel_difference", std::exp(- std::abs(bodyLinearVel_[0] - desired_velocity)));
     // rewards_.record("forwardVel", std::min(4.0, bodyLinearVel_[0]));
 
     return rewards_.sum();
+  }
+
+  void reward_logging(Eigen::Ref<EigenVec> rewards) final {
+    reward_log.setZero(2);
+    reward_log[0] = anymal_->getGeneralizedForce().squaredNorm() * reward_torque_coeff;
+    reward_log[1] = - std::abs(bodyLinearVel_[0] - desired_velocity) * reward_velocity_coeff;
+    rewards = reward_log.cast<float>();
   }
 
   void updateObservation() {
@@ -157,8 +172,8 @@ class ENVIRONMENT : public RaisimGymEnv {
   bool visualizable_ = false;
   raisim::ArticulatedSystem* anymal_;
   Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_, pTarget12_, vTarget_;
-  double terminalRewardCoeff_ = -10., velocity, desired_velocity;
-  Eigen::VectorXd actionMean_, actionStd_, obDouble_;
+  double terminalRewardCoeff_ = -10., velocity, desired_velocity, reward_torque_coeff, reward_velocity_coeff;
+  Eigen::VectorXd actionMean_, actionStd_, obDouble_, reward_log;
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
   std::set<size_t> footIndices_;
 };

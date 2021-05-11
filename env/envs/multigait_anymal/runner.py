@@ -26,6 +26,13 @@ import pdb
 4. isn't there a way to not use curve fit model and just use other matric for reward?
 """
 
+"""
+# TODO
+
+1. reward shaping: 1) low height (stability), 2) no orientation change 3) GRF entropy maximize
++) how coulb the 4 legs have similar load (currently just front two legs get the whole load)
+"""
+
 
 def sin(x, a, b, c, d):
     return a* np.sin(b*x + c) + d
@@ -73,8 +80,8 @@ env = VecEnv(multigait_anymal.RaisimGymEnv(home_path + "/rsc", dump(cfg['environ
 
 # shortcuts
 ob_dim = env.num_obs  # 26 (w/ HAA joints fixed)
-act_dim = env.num_acts + 4  # 8 (w/ HAA joints fixed)
-act_dim = env.num_acts - 2
+act_dim = env.num_acts + 4  # 12 (w/ HAA joints fixed)
+act_dim = env.num_acts
 target_signal_dim = 0
 
 # Training
@@ -111,17 +118,58 @@ if mode == 'retrain':
 
 DESIRED_VELOCITY = cfg['environment']['velocity'] # m/s
 
+"""
+[Joint order]
+
+1) Laikago
+    - FR_thigh_joint
+    - FR_calf_joint
+    - FL_thigh_joint
+    - FL_calf_joint
+    - RR_thigh_joint
+    - RR_calf_joint
+    - RL_thigh_joint
+    - RL_calf_joint
+
+2) Anymal
+    - LF_HFE
+    - LF_KFE
+    - RF_HFE
+    - RF_KFE
+    - LH_HFE
+    - LH_KFE
+    - RH_HFE
+    - RH_KFE
+
+
+[Target signal order]
+
+1) Laikago
+    - FR_thigh_joint
+    - FL_thigh_joint
+    - RR_thigh_joint
+    - RL_thigh_joint
+
+2) Anymal
+    - LF_HFE
+    - RF_HFE
+    - LH_HFE
+    - RH_HFE
+
+"""
+
 t_range = np.arange(n_steps*2) * cfg['environment']['control_dt']
-target_signal = np.zeros((4, n_steps*2))  # [LF_HFE, RF_HFE, LH_HFE, RH_HFE]
-period_param = 2 * np.pi / .25
-LF_HFE_target = [1, 0]
-RF_HFE_target = [1, np.pi]
+target_signal = np.zeros((4, n_steps*2))
+period = .7 # [s]
+period_param = 2 * np.pi / period  # period: 
+LF_HFE_target = [1, np.pi]
+RF_HFE_target = [1, 0]
 LH_HFE_target = [1, 0]
 RH_HFE_target = [1, np.pi]
-target_signal[0] = sin(t_range, 1, period_param * LF_HFE_target[0], LF_HFE_target[1], 0)
-target_signal[1] = sin(t_range, 1, period_param * RF_HFE_target[0], RF_HFE_target[1], 0)
-target_signal[2] = sin(t_range, 1, period_param * LH_HFE_target[0], LH_HFE_target[1], 0)
-target_signal[3] = sin(t_range, 1, period_param * RH_HFE_target[0], RH_HFE_target[1], 0)
+target_signal[0] = sin(t_range, 1, period_param * LF_HFE_target[0], LF_HFE_target[1], 0.5)
+target_signal[1] = sin(t_range, 1, period_param * RF_HFE_target[0], RF_HFE_target[1], 0.5)
+target_signal[2] = sin(t_range, 1, period_param * LH_HFE_target[0], LH_HFE_target[1], 0.5)
+target_signal[3] = sin(t_range, 1, period_param * RH_HFE_target[0], RH_HFE_target[1], 0.5)
 
 env_action = np.zeros((cfg['environment']['num_envs'], 8), dtype=np.float32)
 
@@ -179,8 +227,9 @@ for update in range(1000000):
             # obs_and_target = np.concatenate((obs, target_signal), axis=1, dtype=np.float32)
             action_ll = loaded_graph.architecture(torch.from_numpy(obs))
             action_ll = action_ll.cpu().detach().numpy()
-            action_ll[:, 2:6] = np.tile(action_ll[:, 0][:, np.newaxis], (1, 4)) * target_signal[:, step] + action_ll[:, 1][:, np.newaxis] + action_ll[:, 2:6]
-            reward_ll, dones = env.step(action_ll)
+            env_action[:, [0, 2, 4, 6]] = action_ll[:, :4] * target_signal[:, step] + action_ll[:, 4:8]
+            env_action[:, [1, 3, 5, 7]] = action_ll[:, 8:]
+            reward_ll, dones = env.step(env_action)
             frame_end = time.time()
             wait_time = cfg['environment']['control_dt'] - (frame_end-frame_start)
             if wait_time > 0.:
@@ -198,18 +247,24 @@ for update in range(1000000):
         # obs_and_target = np.concatenate((obs, target_signal), axis=1, dtype=np.float32)
         action = ppo.observe(obs)
 
-        env_action[:, [0, 2, 4, 6]] = action[:, 0][:, np.newaxis] * target_signal[:, step] + action[:, 1][:, np.newaxis]
-        env_action[:, [1, 3, 5, 7]] = action[:, 2:]
+        # env_action[:, [0, 2, 4, 6]] = action[:, 0][:, np.newaxis] * target_signal[:, step] + action[:, 1][:, np.newaxis]
+        # env_action[:, [1, 3, 5, 7]] = action[:, 2:]
 
         # env_action[:, [0, 2, 4, 6]] = action[:, :4] * target_signal[:, step] + action[:, 4:8]
         # env_action[:, [1, 3, 5, 7]] = action[:, 8:]
 
         # action[:, [8, 10, 12, 14]] = action[:, :4] * target_signal[:, step] + action[:, 4:8] + action[:, [8, 10, 12, 14]]
         # action[:, [0, 2, 4, 6]] = np.tile(A[:, np.newaxis], (1, 4)) * target_signal[:, step] + action[:, [0, 2, 4, 6]]
-        reward, dones = env.step(env_action)
+        
+        # reward, dones = env.step(env_action)
+        reward, dones = env.step(action)
         ppo.step(value_obs=obs, rews=reward, dones=dones)
         done_sum = done_sum + sum(dones)
         reward_ll_sum = reward_ll_sum + sum(reward)
+
+        if step % 50 == 0:
+            env.reward_logging()
+            ppo.extra_log(env.reward_log, update*n_steps + step)
 
         # LF_HFE_history.append(obs[:, 4])
         # RF_HFE_history.append(obs[:, 7])

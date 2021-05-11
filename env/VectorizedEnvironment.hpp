@@ -80,6 +80,12 @@ class VectorizedEnvironment {
       perAgentStep(i, action, reward, done);
   }
 
+  void reward_logging(Eigen::Ref<EigenRowMajorMat> &rewards) {
+#pragma omp parallel for
+    for (int i = 0; i < num_envs_; i++)
+      environments_[i]->reward_logging(rewards.row(i));
+  }
+
   void turnOnVisualization() { if(render_) environments_[0]->turnOnVisualization(); }
   void turnOffVisualization() { if(render_) environments_[0]->turnOffVisualization(); }
   void startRecordingVideo(const std::string& videoName) { if(render_) environments_[0]->startRecordingVideo(videoName); }

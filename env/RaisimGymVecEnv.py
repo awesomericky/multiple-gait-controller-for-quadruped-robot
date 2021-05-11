@@ -24,6 +24,7 @@ class RaisimGymVecEnv:
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
         self._done = np.zeros(self.num_envs, dtype=np.bool)
         self.rewards = [[] for _ in range(self.num_envs)]
+        self.reward_log = np.zeros([self.num_envs, 2], dtype=np.float32)  # 2 is the number of reward
 
     def seed(self, seed=None):
         self.wrapper.setSeed(seed)
@@ -85,6 +86,9 @@ class RaisimGymVecEnv:
 
     def curriculum_callback(self):
         self.wrapper.curriculumUpdate()
+    
+    def reward_logging(self):
+        self.wrapper.reward_logging(self.reward_log)
 
     @property
     def num_envs(self):

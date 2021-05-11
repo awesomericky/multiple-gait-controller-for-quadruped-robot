@@ -49,6 +49,7 @@ class RaisimGymEnv {
   virtual void curriculumUpdate() {};
   virtual void close() { if(server_) server_->killServer(); };
   virtual void setSeed(int seed) {};
+  virtual void reward_logging(Eigen::Ref<EigenVec> rewards) = 0;
   ////////////////////////////////
 
   void setSimulationTimeStep(double dt) { simulation_dt_ = dt; world_->setTimeStep(dt); }

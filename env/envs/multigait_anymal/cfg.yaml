@@ -1,12 +1,12 @@
 seed: 1
-record_video: yes
+record_video: no
 
 environment:
   render: True
 # just testing commenting
   num_envs: 100
   eval_every_n: 100
-  num_threads: 30
+  num_threads: 10
   simulation_dt: 0.0025
   control_dt: 0.01
   max_time: 4.0
@@ -15,8 +15,8 @@ environment:
     forwardVel_difference:
       coeff: 0.3
     torque:
-      coeff: 0 # -1e-5 # -4e-5  ==> reward가 0인 구간이 발생하고 그 이후에 업데이트 안됨. 0인 구간이 왜 생기지?
-  velocity: 2
+      coeff: -1e-4 # -1e-5 # -4e-5  ==> reward가 0인 구간이 발생하고 그 이후에 업데이트 안됨. 0인 구간이 왜 생기지?
+  velocity: 1.5
 
 architecture:
   policy_net: [128, 128]
