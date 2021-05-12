@@ -29,8 +29,13 @@ import pdb
 """
 # TODO
 
-1. reward shaping: 1) low height (stability), 2) no orientation change 3) GRF entropy maximize
+(5/12) 1. reward shaping: 1) low height (stability), 2) no orientation change 3) GRF entropy maximize
 +) how coulb the 4 legs have similar load (currently just front two legs get the whole load)
+
+(5/13) 1. total impulse sum minimize (impulse derivative minimize) 
+       2. equation and policy update check
+       3. add direction following
+       4. simulation real time
 """
 
 
@@ -160,7 +165,7 @@ DESIRED_VELOCITY = cfg['environment']['velocity'] # m/s
 
 t_range = np.arange(n_steps*2) * cfg['environment']['control_dt']
 target_signal = np.zeros((4, n_steps*2))
-period = .7 # [s]
+period = 1.5 # [s]
 period_param = 2 * np.pi / period  # period: 
 LF_HFE_target = [1, np.pi]
 RF_HFE_target = [1, 0]
@@ -262,7 +267,7 @@ for update in range(1000000):
         done_sum = done_sum + sum(dones)
         reward_ll_sum = reward_ll_sum + sum(reward)
 
-        if step % 50 == 0:
+        if step % 50 == 0 and 1 < cfg['environment']['num_envs']:
             env.reward_logging()
             ppo.extra_log(env.reward_log, update*n_steps + step)
 

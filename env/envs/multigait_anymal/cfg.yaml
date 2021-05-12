@@ -10,13 +10,16 @@ environment:
   simulation_dt: 0.0025
   control_dt: 0.01
   max_time: 4.0
+  n_reward: 3
   reward:
     # forwardVel:
     forwardVel_difference:
-      coeff: 0.3
+      coeff: 0.5
     torque:
-      coeff: -1e-4 # -1e-5 # -4e-5  ==> reward가 0인 구간이 발생하고 그 이후에 업데이트 안됨. 0인 구간이 왜 생기지?
-  velocity: 1.5
+      coeff: -1e-5 # -4e-5  ==> reward가 0인 구간이 발생하고 그 이후에 업데이트 안됨. 0인 구간이 왜 생기지?
+    GRF_entropy:
+      coeff: 0.1
+  velocity: 1
 
 architecture:
   policy_net: [128, 128]

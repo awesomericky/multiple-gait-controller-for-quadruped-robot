@@ -101,10 +101,12 @@ class PPO:
         self.writer.add_scalar('Policy/mean_noise_std', mean_std.item(), variables['it'])
 
     def extra_log(self, log_value, step):
-        self.writer.add_scalar('Reward/torque/mean', np.mean(log_value[0]), step)
-        self.writer.add_scalar('Reward/torque/std', np.std(log_value[0]), step)
-        self.writer.add_scalar('Reward/velocity/mean', np.mean(log_value[1]), step)
-        self.writer.add_scalar('Reward/velocity/std', np.std(log_value[1]), step)
+        self.writer.add_scalar('Reward/torque/mean', np.mean(log_value[:, 0]), step)
+        self.writer.add_scalar('Reward/torque/std', np.std(log_value[:, 0]), step)
+        self.writer.add_scalar('Reward/velocity/mean', np.mean(log_value[:, 1]), step)
+        self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
+        self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 2]), step)
+        self.writer.add_scalar('Reward/GRF_entropy/std', np.std(log_value[:, 2]), step)
 
     def _train_step(self):
         mean_value_loss = 0

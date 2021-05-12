@@ -46,6 +46,14 @@ class ENVIRONMENT : public RaisimGymEnv {
     /// reward constant
     reward_torque_coeff = cfg["reward"]["torque"]["coeff"].As<double>();
     reward_velocity_coeff = cfg["reward"]["forwardVel_difference"]["coeff"].As<double>();
+    reward_GRF_coeff = cfg["reward"]["GRF_entropy"]["coeff"].As<double>();
+
+    /// contact foot index
+    contact_foot_idx.setZero(4);
+    contact_foot_idx[0] = anymal_->getBodyIdx("FR_calf");
+    contact_foot_idx[1] = anymal_->getBodyIdx("FL_calf");
+    contact_foot_idx[2] = anymal_->getBodyIdx("RR_calf");
+    contact_foot_idx[3] = anymal_->getBodyIdx("RL_calf");
 
     /// this is nominal configuration of anymal
     // gc_init_ << 0, 0, 0.50, 1.0, 0.0, 0.0, 0.0, 0.4, -0.8, 0.4, -0.8, -0.4, 0.8, -0.4, 0.8;
@@ -74,10 +82,10 @@ class ENVIRONMENT : public RaisimGymEnv {
     rewards_.initializeFromConfigurationFile (cfg["reward"]);
 
     /// indices of links that should not make contact with ground
-    footIndices_.insert(anymal_->getBodyIdx("FR_calf"));
-    footIndices_.insert(anymal_->getBodyIdx("FL_calf"));
-    footIndices_.insert(anymal_->getBodyIdx("RR_calf"));
-    footIndices_.insert(anymal_->getBodyIdx("RL_calf"));
+    footIndices_.insert(anymal_->getBodyIdx("FR_calf")); // 2
+    footIndices_.insert(anymal_->getBodyIdx("FL_calf")); // 4
+    footIndices_.insert(anymal_->getBodyIdx("RR_calf")); // 6
+    footIndices_.insert(anymal_->getBodyIdx("RL_calf")); // 8
     // footIndices_.insert(anymal_->getBodyIdx("trunk"));
 
     /// visualize if it is the first environment
@@ -117,14 +125,16 @@ class ENVIRONMENT : public RaisimGymEnv {
     // velocity = std::min(4.0, bodyLinearVel_[0]);
     rewards_.record("forwardVel_difference", std::exp(- std::abs(bodyLinearVel_[0] - desired_velocity)));
     // rewards_.record("forwardVel", std::min(4.0, bodyLinearVel_[0]));
+    rewards_.record("GRF_entropy", GRF_entropy);
 
     return rewards_.sum();
   }
 
   void reward_logging(Eigen::Ref<EigenVec> rewards) final {
-    reward_log.setZero(2);
+    reward_log.setZero(3);
     reward_log[0] = anymal_->getGeneralizedForce().squaredNorm() * reward_torque_coeff;
     reward_log[1] = - std::abs(bodyLinearVel_[0] - desired_velocity) * reward_velocity_coeff;
+    reward_log[2] = GRF_entropy * reward_GRF_coeff;
     rewards = reward_log.cast<float>();
   }
 
@@ -148,6 +158,31 @@ class ENVIRONMENT : public RaisimGymEnv {
         bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity // dim=6 (3 + 3)
         gv_.tail(8); /// joint velocity // dim=8 (w/ HAA joint fixed)
     
+    /// z axis contact impulse for each feet (= perpendicular GRF * dt)
+    total_contact_impulse.setZero(4);
+
+    for(auto& contact: anymal_->getContacts()) {
+      if (contact.skip()) continue; /// if the contact is internal, one contact point is set to 'skip'
+      
+      single_contact_impulse = contact.getContactFrame().e().transpose() * contact.getImpulse()->e();
+
+      for (int i; i<4; i++) {
+        if (contact_foot_idx[i] == contact.getlocalBodyIndex()) {
+          total_contact_impulse[i] = single_contact_impulse[-1];
+          continue;
+        }
+      }
+
+      /// compute perpendicular GRF entropy
+      total_contact_impulse.normalize();
+      total_contact_impulse = total_contact_impulse.array() + 1e-6;
+      GRF_entropy = - (total_contact_impulse.array() * total_contact_impulse.array().log()).sum();
+
+      // if ( footIndex == contact.getlocalBodyIndex() ) {
+        // std::cout<<"Contact impudelse in the world frame: "<< contact.getContactFrame().e().transpose() * contact.getImpulse()->e()<<std::endl;
+      // }
+    }
+
   }
 
   void observe(Eigen::Ref<EigenVec> ob) final {
@@ -172,8 +207,8 @@ class ENVIRONMENT : public RaisimGymEnv {
   bool visualizable_ = false;
   raisim::ArticulatedSystem* anymal_;
   Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_, pTarget12_, vTarget_;
-  double terminalRewardCoeff_ = -10., velocity, desired_velocity, reward_torque_coeff, reward_velocity_coeff;
-  Eigen::VectorXd actionMean_, actionStd_, obDouble_, reward_log;
+  double terminalRewardCoeff_ = -10., velocity, desired_velocity, reward_torque_coeff, reward_velocity_coeff, reward_GRF_coeff, GRF_entropy;
+  Eigen::VectorXd actionMean_, actionStd_, obDouble_, reward_log, contact_foot_idx, single_contact_impulse, total_contact_impulse;
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
   std::set<size_t> footIndices_;
 };
