@@ -3,6 +3,7 @@
 # // Copyright 2020, RaiSim Tech//
 # //----------------------------//
 
+from matplotlib import pyplot as plt
 import numpy as np
 import platform
 import os
@@ -25,6 +26,10 @@ class RaisimGymVecEnv:
         self._done = np.zeros(self.num_envs, dtype=np.bool)
         self.rewards = [[] for _ in range(self.num_envs)]
         self.reward_log = np.zeros([self.num_envs, cfg["n_reward"]], dtype=np.float32)
+
+        # logging
+        self.update_count = 0
+        self.joint_angle = []
 
     def seed(self, seed=None):
         self.wrapper.setSeed(seed)
@@ -68,6 +73,18 @@ class RaisimGymVecEnv:
             return self._normalize_observation(self._observation)
         else:
             return self._observation.copy()
+    
+    def observe_logging(self, update_mean=True):
+        self.wrapper.observe(self._observation)
+        not_normalized_obs = self._observation
+
+        if self.normalize_ob:
+            if update_mean:
+                self.obs_rms.update(self._observation)
+
+            return self._normalize_observation(self._observation), not_normalized_obs
+        else:
+            return self._observation.copy()
 
     def reset(self):
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
@@ -75,7 +92,6 @@ class RaisimGymVecEnv:
 
     def _normalize_observation(self, obs):
         if self.normalize_ob:
-
             return np.clip((obs - self.obs_rms.mean) / np.sqrt(self.obs_rms.var + 1e-8), -self.clip_obs,
                            self.clip_obs)
         else:

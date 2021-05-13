@@ -69,6 +69,9 @@ class ENVIRONMENT : public RaisimGymEnv {
     anymal_->setPdGains(jointPgain, jointDgain);
     anymal_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
+    // Eigen::VectorXd joint = anymal_->getJointLimits();
+    // std::cout << "Joint limits" << joint << std::endl;
+
     /// MUST BE DONE FOR ALL ENVIRONMENTS
     obDim_ = 26;
     actionDim_ = nJoints_; actionMean_.setZero(actionDim_); actionStd_.setZero(actionDim_);
@@ -110,6 +113,12 @@ class ENVIRONMENT : public RaisimGymEnv {
     pTarget12_ += actionMean_;
     pTarget_.tail(nJoints_) = pTarget12_;
 
+    // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
+    // std::cout << "pTarget_" << pTarget_.format(CommaInitFmt) << std::endl;
+    // std::cout << "pTarget12_" << pTarget12_.format(CommaInitFmt) << std::endl;
+    // std::cout << "vTarget_" << vTarget_.format(CommaInitFmt) << std::endl;
+    // std::cout << "action" << action.format(CommaInitFmt) << std::endl;
+
     anymal_->setPdTarget(pTarget_, vTarget_);
 
     for(int i=0; i< int(control_dt_ / simulation_dt_ + 1e-10); i++){
@@ -120,11 +129,12 @@ class ENVIRONMENT : public RaisimGymEnv {
 
     updateObservation();
 
-    rewards_.record("torque", anymal_->getGeneralizedForce().squaredNorm());
-    // velocity = std::pow(std::pow(bodyLinearVel_[0], 2) + std::pow(bodyLinearVel_[1], 2), 0.5);
-    // velocity = std::min(4.0, bodyLinearVel_[0]);
+    torque = anymal_->getGeneralizedForce().e(); // squaredNorm
+    // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
+    // std::cout << "torque" << torque.format(CommaInitFmt) << std::endl;
+
+    rewards_.record("torque", (gv_ * torque.tail(8)).array().abs().sum() * control_dt_);
     rewards_.record("forwardVel_difference", std::exp(- std::abs(bodyLinearVel_[0] - desired_velocity)));
-    // rewards_.record("forwardVel", std::min(4.0, bodyLinearVel_[0]));
     rewards_.record("GRF_entropy", GRF_entropy);
 
     return rewards_.sum();
@@ -132,8 +142,8 @@ class ENVIRONMENT : public RaisimGymEnv {
 
   void reward_logging(Eigen::Ref<EigenVec> rewards) final {
     reward_log.setZero(3);
-    reward_log[0] = anymal_->getGeneralizedForce().squaredNorm() * reward_torque_coeff;
-    reward_log[1] = - std::abs(bodyLinearVel_[0] - desired_velocity) * reward_velocity_coeff;
+    reward_log[0] = (gv_ * torque.tail(8)).array().abs().sum() * control_dt_ * reward_torque_coeff;
+    reward_log[1] = std::exp(- std::abs(bodyLinearVel_[0] - desired_velocity)) * reward_velocity_coeff;
     reward_log[2] = GRF_entropy * reward_GRF_coeff;
     rewards = reward_log.cast<float>();
   }
@@ -160,6 +170,9 @@ class ENVIRONMENT : public RaisimGymEnv {
     
     /// z axis contact impulse for each feet (= perpendicular GRF * dt)
     total_contact_impulse.setZero(4);
+
+    // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
+    // std::cout << "Joint" << gc_.tail(8).format(CommaInitFmt) << std::endl;
 
     for(auto& contact: anymal_->getContacts()) {
       if (contact.skip()) continue; /// if the contact is internal, one contact point is set to 'skip'
@@ -206,7 +219,7 @@ class ENVIRONMENT : public RaisimGymEnv {
   int gcDim_, gvDim_, nJoints_;
   bool visualizable_ = false;
   raisim::ArticulatedSystem* anymal_;
-  Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_, pTarget12_, vTarget_;
+  Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_, pTarget12_, vTarget_, torque;
   double terminalRewardCoeff_ = -10., velocity, desired_velocity, reward_torque_coeff, reward_velocity_coeff, reward_GRF_coeff, GRF_entropy;
   Eigen::VectorXd actionMean_, actionStd_, obDouble_, reward_log, contact_foot_idx, single_contact_impulse, total_contact_impulse;
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;

@@ -12,6 +12,7 @@ import numpy as np
 import torch
 import datetime
 import argparse
+import wandb
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 import pdb
@@ -80,13 +81,23 @@ home_path = task_path + "/../../../../.."
 # config
 cfg = YAML().load(open(task_path + "/cfg.yaml", 'r'))
 
+# logging
+if cfg['logger'] == 'tb':
+    saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
+                           save_items=[task_path + "/cfg.yaml", task_path + "/Environment.hpp"])
+    tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
+elif cfg['logger'] == 'wandb':
+    wandb.init(project='multigait', name='experiment 1', config=dict(cfg))
+
+
+
 # create environment from the configuration file
 env = VecEnv(multigait_anymal.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
 
 # shortcuts
 ob_dim = env.num_obs  # 26 (w/ HAA joints fixed)
-act_dim = env.num_acts + 4  # 12 (w/ HAA joints fixed)
-act_dim = env.num_acts
+act_dim = env.num_acts  # 12 (w/ HAA joints fixed)
+# act_dim = env.num_acts - 4
 target_signal_dim = 0
 
 # Training
@@ -103,7 +114,7 @@ critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.L
 
 saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
                            save_items=[task_path + "/cfg.yaml", task_path + "/Environment.hpp"])
-tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
+# tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,
@@ -116,6 +127,7 @@ ppo = PPO.PPO(actor=actor,
               device=device,
               log_dir=saver.data_dir,
               shuffle_batch=False,
+              logger=cfg['logger']
               )
 
 if mode == 'retrain':
@@ -165,16 +177,16 @@ DESIRED_VELOCITY = cfg['environment']['velocity'] # m/s
 
 t_range = np.arange(n_steps*2) * cfg['environment']['control_dt']
 target_signal = np.zeros((4, n_steps*2))
-period = 1.5 # [s]
+period = 0.5 # [s]
 period_param = 2 * np.pi / period  # period: 
 LF_HFE_target = [1, np.pi]
 RF_HFE_target = [1, 0]
 LH_HFE_target = [1, 0]
 RH_HFE_target = [1, np.pi]
-target_signal[0] = sin(t_range, 1, period_param * LF_HFE_target[0], LF_HFE_target[1], 0.5)
-target_signal[1] = sin(t_range, 1, period_param * RF_HFE_target[0], RF_HFE_target[1], 0.5)
-target_signal[2] = sin(t_range, 1, period_param * LH_HFE_target[0], LH_HFE_target[1], 0.5)
-target_signal[3] = sin(t_range, 1, period_param * RH_HFE_target[0], RH_HFE_target[1], 0.5)
+target_signal[0] = sin(t_range, 0.3, period_param * LF_HFE_target[0], LF_HFE_target[1], 0.5)
+target_signal[1] = sin(t_range, 0.3, period_param * RF_HFE_target[0], RF_HFE_target[1], 0.5)
+target_signal[2] = sin(t_range, 0.3, period_param * LH_HFE_target[0], LH_HFE_target[1], 0.5)
+target_signal[3] = sin(t_range, 0.3, period_param * RH_HFE_target[0], RH_HFE_target[1], 0.5)
 
 env_action = np.zeros((cfg['environment']['num_envs'], 8), dtype=np.float32)
 
@@ -246,11 +258,19 @@ for update in range(1000000):
         env.reset()
         env.save_scaling(saver.data_dir, str(update))
     """
+    # amplitude_history = np.zeros(n_steps)
+    # shaft_history = np.zeros(n_steps)
+    joint_history = np.zeros(n_steps)
+    
     # actual training
     for step in range(n_steps):
-        obs = env.observe()
+        obs, non_obs = env.observe_logging()
         # obs_and_target = np.concatenate((obs, target_signal), axis=1, dtype=np.float32)
         action = ppo.observe(obs)
+        # amplitude_history[step] = action[0, 0]
+        # shaft_history[step] = action[0, 4]
+        if update % 50 == 0:
+            joint_history[step] = non_obs[0, 4]
 
         # env_action[:, [0, 2, 4, 6]] = action[:, 0][:, np.newaxis] * target_signal[:, step] + action[:, 1][:, np.newaxis]
         # env_action[:, [1, 3, 5, 7]] = action[:, 2:]
@@ -258,23 +278,34 @@ for update in range(1000000):
         # env_action[:, [0, 2, 4, 6]] = action[:, :4] * target_signal[:, step] + action[:, 4:8]
         # env_action[:, [1, 3, 5, 7]] = action[:, 8:]
 
+        env_action[:, [0, 2, 4, 6]] = target_signal[:, step] + action[:, :4]
+        env_action[:, [1, 3, 5, 7]] =  action[:, 4:]
+
         # action[:, [8, 10, 12, 14]] = action[:, :4] * target_signal[:, step] + action[:, 4:8] + action[:, [8, 10, 12, 14]]
         # action[:, [0, 2, 4, 6]] = np.tile(A[:, np.newaxis], (1, 4)) * target_signal[:, step] + action[:, [0, 2, 4, 6]]
         
-        # reward, dones = env.step(env_action)
-        reward, dones = env.step(action)
+        reward, dones = env.step(env_action)
+        # reward, dones = env.step(action)
         ppo.step(value_obs=obs, rews=reward, dones=dones)
         done_sum = done_sum + sum(dones)
         reward_ll_sum = reward_ll_sum + sum(reward)
 
+
         if step % 50 == 0 and 1 < cfg['environment']['num_envs']:
             env.reward_logging()
-            ppo.extra_log(env.reward_log, update*n_steps + step)
+            ppo.extra_log(env.reward_log, update*n_steps + step, type='reward')
+            # ppo.extra_log(action[:, :8], update*n_steps + step, type='action')
 
         # LF_HFE_history.append(obs[:, 4])
         # RF_HFE_history.append(obs[:, 7])
         # LH_HFE_history.append(obs[:, 10])
         # RH_HFE_history.append(obs[:, 13])
+    
+    if update % 50 == 0:
+        plt.plot(t_range[:n_steps], joint_history, 'o')
+        plt.plot(t_range[:n_steps], target_signal[0, :n_steps])
+        plt.savefig('plot.png')
+        plt.close()
 
     # Fitting sine model
     # t_range = np.arange(n_steps) * cfg['environment']['control_dt']
@@ -380,7 +411,7 @@ for update in range(1000000):
     """
 
     # take st step to get value obs
-    obs = env.observe()
+    obs, _ = env.observe_logging()
     # obs_and_target = np.concatenate((obs, target_signal), axis=1, dtype=np.float32)
     # ppo.update(actor_obs=obs_and_target, value_obs=obs, log_this_iteration=update % 10 == 0, update=update, auxilory_value=sin_fitting_loss[:, np.newaxis])
     ppo.update(actor_obs=obs, value_obs=obs, log_this_iteration=update % 10 == 0, update=update)
@@ -391,6 +422,8 @@ for update in range(1000000):
     actor.distribution.enforce_minimum_std((torch.ones(act_dim)*0.2).to(device))
 
     end = time.time()
+
+    # wandb.log({'amplitude std': np.std(amplitude_history), 'shaft std': np.std(shaft_history)})
 
     print('----------------------------------------------------')
     print('{:>6}th iteration'.format(update))

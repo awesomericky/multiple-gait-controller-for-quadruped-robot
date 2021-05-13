@@ -1,8 +1,9 @@
+import pdb
 import torch.nn as nn
 import numpy as np
 import torch
 from torch.distributions import Normal
-
+import torch.nn.functional as F
 
 class Actor:
     def __init__(self, architecture, distribution, device='cpu'):
@@ -16,11 +17,15 @@ class Actor:
 
     def sample(self, obs):
         logits = self.architecture.architecture(obs)
+        # logits[:, :4] = F.relu(logits[:, :4])  # clipping amplitude
         actions, log_prob = self.distribution.sample(logits)
+        # actions[:, :4] = F.relu(actions[:, :4])  # clipping amplitude
         return actions.cpu().detach(), log_prob.cpu().detach()
 
     def evaluate(self, obs, actions):
         action_mean = self.architecture.architecture(obs)
+        # action_mean_clipped = torch.cat((F.relu(action_mean[:, :4]), action_mean[:, 4:]), dim=1)  # clipping amplitude
+        # return self.distribution.evaluate(obs, action_mean_clipped, actions)
         return self.distribution.evaluate(obs, action_mean, actions)
 
     def parameters(self):
@@ -80,6 +85,7 @@ class MLP(nn.Module):
             scale.append(np.sqrt(2))
 
         modules.append(nn.Linear(shape[-1], output_size))
+        
         self.architecture = nn.Sequential(*modules)
         scale.append(np.sqrt(2))
 

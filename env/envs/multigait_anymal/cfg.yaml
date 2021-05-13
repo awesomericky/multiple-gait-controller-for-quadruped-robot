@@ -4,7 +4,7 @@ record_video: no
 environment:
   render: True
 # just testing commenting
-  num_envs: 100
+  num_envs: 100 # 100
   eval_every_n: 100
   num_threads: 10
   simulation_dt: 0.0025
@@ -12,15 +12,16 @@ environment:
   max_time: 4.0
   n_reward: 3
   reward:
-    # forwardVel:
     forwardVel_difference:
       coeff: 0.5
     torque:
-      coeff: -1e-5 # -4e-5  ==> reward가 0인 구간이 발생하고 그 이후에 업데이트 안됨. 0인 구간이 왜 생기지?
+      coeff: -4e-5 # -4e-5  ==> reward가 0인 구간이 발생하고 그 이후에 업데이트 안됨. 0인 구간이 왜 생기지?
     GRF_entropy:
-      coeff: 0.1
-  velocity: 1
+      coeff: 0.0
+  velocity: 0.6
 
 architecture:
   policy_net: [128, 128]
   value_net: [128, 128]
+
+logger: 'tb'

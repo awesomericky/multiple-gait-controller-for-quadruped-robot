@@ -1,11 +1,15 @@
 from datetime import datetime
 import os
+from matplotlib.pyplot import step
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 from .storage import RolloutStorage
 import numpy as np
+import wandb
+
+torch.autograd.set_detect_anomaly(True)
 
 
 class PPO:
@@ -26,7 +30,8 @@ class PPO:
                  use_clipped_value_loss=True,
                  log_dir='run',
                  device='cpu',
-                 shuffle_batch=True):
+                 shuffle_batch=True,
+                 logger='tb'):
 
         # PPO components
         self.actor = actor
@@ -57,10 +62,12 @@ class PPO:
         self.use_clipped_value_loss = use_clipped_value_loss
 
         # Log
-        self.log_dir = os.path.join(log_dir, datetime.now().strftime('%b%d_%H-%M-%S'))
-        self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
-        self.tot_timesteps = 0
-        self.tot_time = 0
+        if logger == 'tb':
+            self.log_dir = os.path.join(log_dir, datetime.now().strftime('%b%d_%H-%M-%S'))
+            self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+            self.tot_timesteps = 0
+            self.tot_time = 0
+            self.logger = logger
 
         # temps
         self.actions = None
@@ -96,17 +103,73 @@ class PPO:
         self.tot_timesteps += self.num_transitions_per_env * self.num_envs
         mean_std = self.actor.distribution.std.mean()
 
-        self.writer.add_scalar('Loss/value_function', variables['mean_value_loss'], variables['it'])
-        self.writer.add_scalar('Loss/surrogate', variables['mean_surrogate_loss'], variables['it'])
-        self.writer.add_scalar('Policy/mean_noise_std', mean_std.item(), variables['it'])
+        if self.logger == 'tb':
+            self.writer.add_scalar('Loss/value_function', variables['mean_value_loss'], variables['it'])
+            self.writer.add_scalar('Loss/surrogate', variables['mean_surrogate_loss'], variables['it'])
+            self.writer.add_scalar('Policy/mean_noise_std', mean_std.item(), variables['it'])
 
-    def extra_log(self, log_value, step):
-        self.writer.add_scalar('Reward/torque/mean', np.mean(log_value[:, 0]), step)
-        self.writer.add_scalar('Reward/torque/std', np.std(log_value[:, 0]), step)
-        self.writer.add_scalar('Reward/velocity/mean', np.mean(log_value[:, 1]), step)
-        self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
-        self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 2]), step)
-        self.writer.add_scalar('Reward/GRF_entropy/std', np.std(log_value[:, 2]), step)
+        elif self.logger == 'wandb':
+            wandb.log({'Loss/value_function': variables['mean_value_loss'], \
+                    'Loss/surrogate': variables['mean_surrogate_loss'], \
+                    'Policy/mean_noise_std': mean_std.item()})
+
+    def extra_log(self, log_value, step, type=None):
+        if self.logger == 'tb':
+            if type == 'reward':
+                self.writer.add_scalar('Reward/torque/mean', np.mean(log_value[:, 0]), step)
+                self.writer.add_scalar('Reward/torque/std', np.std(log_value[:, 0]), step)
+                self.writer.add_scalar('Reward/velocity/mean', np.mean(log_value[:, 1]), step)
+                self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
+                self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 2]), step)
+                self.writer.add_scalar('Reward/GRF_entropy/std', np.std(log_value[:, 2]), step)
+            elif type == 'action':
+                # amplitude
+                self.writer.add_scalar('CPG_tranform/FR_amplitude/mean', np.mean(log_value[:, 0]), step)
+                self.writer.add_scalar('CPG_tranform/FR_amplitude/std', np.std(log_value[:, 0]), step)
+                self.writer.add_scalar('CPG_tranform/FL_amplitude/mean', np.mean(log_value[:, 1]), step)
+                self.writer.add_scalar('CPG_tranform/FL_amplitude/std', np.std(log_value[:, 1]), step)
+                self.writer.add_scalar('CPG_tranform/RR_amplitude/mean', np.mean(log_value[:, 2]), step)
+                self.writer.add_scalar('CPG_tranform/RR_amplitude/std', np.std(log_value[:, 2]), step)
+                self.writer.add_scalar('CPG_tranform/RL_amplitude/mean', np.mean(log_value[:, 3]), step)
+                self.writer.add_scalar('CPG_tranform/RL_amplitude/std', np.std(log_value[:, 3]), step)
+
+                # shaft position
+                self.writer.add_scalar('CPG_tranform/FR_shaft/mean', np.mean(log_value[:, 4]), step)
+                self.writer.add_scalar('CPG_tranform/FR_shaft/std', np.std(log_value[:, 4]), step)
+                self.writer.add_scalar('CPG_tranform/FL_shaft/mean', np.mean(log_value[:, 5]), step)
+                self.writer.add_scalar('CPG_tranform/FL_shaft/std', np.std(log_value[:, 5]), step)
+                self.writer.add_scalar('CPG_tranform/RR_shaft/mean', np.mean(log_value[:, 6]), step)
+                self.writer.add_scalar('CPG_tranform/RR_shaft/std', np.std(log_value[:, 6]), step)
+                self.writer.add_scalar('CPG_tranform/RL_shaft/mean', np.mean(log_value[:, 7]), step)
+                self.writer.add_scalar('CPG_tranform/RL_shaft/std', np.std(log_value[:, 7]), step)
+
+
+        elif self.logger == 'wandb':
+            if type == 'reward':
+                wandb.log({'Reward/torque/mean': np.mean(log_value[:, 0]), 'Reward/torque/std': np.std(log_value[:, 0]), \
+                        'Reward/velocity/mean': np.mean(log_value[:, 1]), 'Reward/velocity/std': np.std(log_value[:, 1]), \
+                        'Reward/GRF_entropy/mean': np.mean(log_value[:, 2]), 'Reward/GRF_entropy/std': np.std(log_value[:, 2])}, \
+                            step=step)
+            elif type == 'action':
+                # amplitude
+                wandb.log({'CPG_tranform/FR_amplitude/mean': np.mean(log_value[:, 0]), \
+                        'CPG_tranform/FR_amplitude/std': np.std(log_value[:, 0]), \
+                        'CPG_tranform/FL_amplitude/mean': np.mean(log_value[:, 1]), \
+                        'CPG_tranform/FL_amplitude/std': np.std(log_value[:, 1]), 
+                        'CPG_tranform/RR_amplitude/mean': np.mean(log_value[:, 2]), \
+                        'CPG_tranform/RR_amplitude/std': np.std(log_value[:, 2]), \
+                        'CPG_tranform/RL_amplitude/mean': np.mean(log_value[:, 3]), \
+                        'CPG_tranform/RL_amplitude/std': np.std(log_value[:, 3])}, step=step)
+
+                # shaft position
+                wandb.log({'CPG_tranform/FR_shaft/mean': np.mean(log_value[:, 4]), \
+                        'CPG_tranform/FR_shaft/std': np.std(log_value[:, 4]), \
+                        'CPG_tranform/FL_shaft/mean': np.mean(log_value[:, 5]), \
+                        'CPG_tranform/FL_shaft/std': np.std(log_value[:, 5]), 
+                        'CPG_tranform/RR_shaft/mean': np.mean(log_value[:, 6]), \
+                        'CPG_tranform/RR_shaft/std': np.std(log_value[:, 6]), \
+                        'CPG_tranform/RL_shaft/mean': np.mean(log_value[:, 7]), \
+                        'CPG_tranform/RL_shaft/std': np.std(log_value[:, 7])}, step=step)
 
     def _train_step(self):
         mean_value_loss = 0
