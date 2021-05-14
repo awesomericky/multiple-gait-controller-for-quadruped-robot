@@ -17,21 +17,11 @@ from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 import pdb
 
-
-"""
-# TODO
-
-1. error of sin regression should be the closest point to either 0 or 2*pi (ex) if value is 2pi-1, then the mse should be calculated with 2pi, not 0
-2. check whether value function is being updated
-3. check curve fit model. Is it correct? could we improve it by bounding area or initialize better?
-4. isn't there a way to not use curve fit model and just use other matric for reward?
-"""
-
 """
 # TODO
 
 (5/12) 1. reward shaping: 1) low height (stability), 2) no orientation change 3) GRF entropy maximize
-+) how coulb the 4 legs have similar load (currently just front two legs get the whole load)
++) how could the 4 legs have similar load (currently just front two legs get the whole load)
 
 (5/13) 1. total impulse sum minimize (impulse derivative minimize) 
        2. equation and policy update check
@@ -41,7 +31,8 @@ import pdb
 
 
 def sin(x, a, b, c, d):
-    return a* np.sin(b*x + c) + d
+    return a * np.sin(b*x + c) + d
+
 
 def shift_sin_param(param1, param2, mean_param):
     new_param = (param2 - param1)/mean_param
@@ -60,13 +51,16 @@ def shift_sin_param(param1, param2, mean_param):
 
 #     return shift_param
 
+
 # task specification
 task_name = "multigait_anymal"
 
 # configuration
 parser = argparse.ArgumentParser()
-parser.add_argument('-m', '--mode', help='set mode either train or test', type=str, default='train')
-parser.add_argument('-w', '--weight', help='pre-trained weight path', type=str, default='')
+parser.add_argument(
+    '-m', '--mode', help='set mode either train or test', type=str, default='train')
+parser.add_argument(
+    '-w', '--weight', help='pre-trained weight path', type=str, default='')
 args = parser.parse_args()
 mode = args.mode
 weight_path = args.weight
@@ -84,15 +78,16 @@ cfg = YAML().load(open(task_path + "/cfg.yaml", 'r'))
 # logging
 if cfg['logger'] == 'tb':
     saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
-                           save_items=[task_path + "/cfg.yaml", task_path + "/Environment.hpp"])
-    tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
+                               save_items=[task_path + "/cfg.yaml", task_path + "/Environment.hpp"])
+    # press refresh (F5) after the first ppo update
+    tensorboard_launcher(saver.data_dir+"/..")
 elif cfg['logger'] == 'wandb':
     wandb.init(project='multigait', name='experiment 1', config=dict(cfg))
 
 
-
 # create environment from the configuration file
-env = VecEnv(multigait_anymal.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
+env = VecEnv(multigait_anymal.RaisimGymEnv(home_path + "/rsc",
+             dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
 
 # shortcuts
 ob_dim = env.num_obs  # 26 (w/ HAA joints fixed)
@@ -101,13 +96,15 @@ act_dim = env.num_acts  # 12 (w/ HAA joints fixed)
 target_signal_dim = 0
 
 # Training
-n_steps = math.floor(cfg['environment']['max_time'] / cfg['environment']['control_dt'])
+n_steps = math.floor(cfg['environment']['max_time'] /
+                     cfg['environment']['control_dt'])
 total_steps = n_steps * env.num_envs
 
 avg_rewards = []
 
 actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + target_signal_dim, act_dim),
-                         ppo_module.MultivariateGaussianDiagonalCovariance(act_dim, 1.0), #1.0
+                         ppo_module.MultivariateGaussianDiagonalCovariance(
+                             act_dim, 1.0),  # 1.0
                          device)
 critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim, 1),
                            device)
@@ -133,7 +130,7 @@ ppo = PPO.PPO(actor=actor,
 if mode == 'retrain':
     load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir)
 
-DESIRED_VELOCITY = cfg['environment']['velocity'] # m/s
+DESIRED_VELOCITY = cfg['environment']['velocity']  # m/s
 
 """
 [Joint order]
@@ -177,16 +174,20 @@ DESIRED_VELOCITY = cfg['environment']['velocity'] # m/s
 
 t_range = np.arange(n_steps*2) * cfg['environment']['control_dt']
 target_signal = np.zeros((4, n_steps*2))
-period = 0.5 # [s]
-period_param = 2 * np.pi / period  # period: 
+period = 0.7  # [s]
+period_param = 2 * np.pi / period  # period:
 LF_HFE_target = [1, np.pi]
 RF_HFE_target = [1, 0]
 LH_HFE_target = [1, 0]
 RH_HFE_target = [1, np.pi]
-target_signal[0] = sin(t_range, 0.3, period_param * LF_HFE_target[0], LF_HFE_target[1], 0.5)
-target_signal[1] = sin(t_range, 0.3, period_param * RF_HFE_target[0], RF_HFE_target[1], 0.5)
-target_signal[2] = sin(t_range, 0.3, period_param * LH_HFE_target[0], LH_HFE_target[1], 0.5)
-target_signal[3] = sin(t_range, 0.3, period_param * RH_HFE_target[0], RH_HFE_target[1], 0.5)
+target_signal[0] = sin(t_range, 0.7, period_param *
+                       LF_HFE_target[0], LF_HFE_target[1], 0.1)
+target_signal[1] = sin(t_range, 0.7, period_param *
+                       RF_HFE_target[0], RF_HFE_target[1], 0.1)
+target_signal[2] = sin(t_range, 0.7, period_param *
+                       LH_HFE_target[0], LH_HFE_target[1], 0.1)
+target_signal[3] = sin(t_range, 0.7, period_param *
+                       RH_HFE_target[0], RH_HFE_target[1], 0.1)
 
 env_action = np.zeros((cfg['environment']['num_envs'], 8), dtype=np.float32)
 
@@ -196,7 +197,7 @@ for update in range(1000000):
     reward_ll_sum = 0
     done_sum = 0
     average_dones = 0.
-    
+
     # LF_HFE_history = []
     # RF_HFE_history = []
     # LH_HFE_history = []
@@ -261,7 +262,7 @@ for update in range(1000000):
     # amplitude_history = np.zeros(n_steps)
     # shaft_history = np.zeros(n_steps)
     joint_history = np.zeros(n_steps)
-    
+
     # actual training
     for step in range(n_steps):
         obs, non_obs = env.observe_logging()
@@ -278,20 +279,19 @@ for update in range(1000000):
         # env_action[:, [0, 2, 4, 6]] = action[:, :4] * target_signal[:, step] + action[:, 4:8]
         # env_action[:, [1, 3, 5, 7]] = action[:, 8:]
 
-        env_action[:, [0, 2, 4, 6]] = target_signal[:, step] + action[:, :4]
-        env_action[:, [1, 3, 5, 7]] =  action[:, 4:]
+        # # env_action[:, [0, 2, 4, 6]] = target_signal[:, step] + action[:, :4]
+        # # env_action[:, [1, 3, 5, 7]] =  action[:, 4:]
 
         # action[:, [8, 10, 12, 14]] = action[:, :4] * target_signal[:, step] + action[:, 4:8] + action[:, [8, 10, 12, 14]]
         # action[:, [0, 2, 4, 6]] = np.tile(A[:, np.newaxis], (1, 4)) * target_signal[:, step] + action[:, [0, 2, 4, 6]]
-        
-        reward, dones = env.step(env_action)
-        # reward, dones = env.step(action)
+
+        # reward, dones = env.step(env_action)
+        reward, dones = env.step(action)
         ppo.step(value_obs=obs, rews=reward, dones=dones)
         done_sum = done_sum + sum(dones)
         reward_ll_sum = reward_ll_sum + sum(reward)
 
-
-        if step % 50 == 0 and 1 < cfg['environment']['num_envs']:
+        if step % 100 == 0 and 1 < cfg['environment']['num_envs']:
             env.reward_logging()
             ppo.extra_log(env.reward_log, update*n_steps + step, type='reward')
             # ppo.extra_log(action[:, :8], update*n_steps + step, type='action')
@@ -300,7 +300,7 @@ for update in range(1000000):
         # RF_HFE_history.append(obs[:, 7])
         # LH_HFE_history.append(obs[:, 10])
         # RH_HFE_history.append(obs[:, 13])
-    
+
     if update % 50 == 0:
         plt.plot(t_range[:n_steps], joint_history, 'o')
         plt.plot(t_range[:n_steps], target_signal[0, :n_steps])
@@ -361,7 +361,7 @@ for update in range(1000000):
     #         RH_HFE_param_cov[i] = np.diag(param_cov)[1:3]
     #     except:
     #         print('curve fit error (RH_HFE)')
-    
+
     # signal_freq = np.concatenate((LF_HFE_param[:, 0][:, np.newaxis], RF_HFE_param[:, 0][:, np.newaxis], \
     #                             LH_HFE_param[:, 0][:, np.newaxis], RH_HFE_param[:, 0][:, np.newaxis]), axis=1)
     # signal_freq_mean = np.mean(signal_freq, axis=1)
@@ -370,7 +370,7 @@ for update in range(1000000):
     # RF_HFE_param = shift_sin_param(RF_HFE_param[:, 1], LF_HFE_param[:, 1], signal_freq_mean)
     # LH_HFE_param = shift_sin_param(LH_HFE_param[:, 1], LF_HFE_param[:, 1], signal_freq_mean)
     # RH_HFE_param = shift_sin_param(RH_HFE_param[:, 1], LF_HFE_param[:, 1], signal_freq_mean)
-    
+
     # sin_fitting_loss -= (RF_HFE_param - RF_HFE_target[-1])**2
     # sin_fitting_loss -= (LH_HFE_param - LH_HFE_target[-1])**2
     # sin_fitting_loss -= (RH_HFE_param - RH_HFE_target[-1])**2
@@ -414,12 +414,14 @@ for update in range(1000000):
     obs, _ = env.observe_logging()
     # obs_and_target = np.concatenate((obs, target_signal), axis=1, dtype=np.float32)
     # ppo.update(actor_obs=obs_and_target, value_obs=obs, log_this_iteration=update % 10 == 0, update=update, auxilory_value=sin_fitting_loss[:, np.newaxis])
-    ppo.update(actor_obs=obs, value_obs=obs, log_this_iteration=update % 10 == 0, update=update)
+    ppo.update(actor_obs=obs, value_obs=obs,
+               log_this_iteration=update % 10 == 0, update=update)
     average_ll_performance = reward_ll_sum / total_steps
     average_dones = done_sum / total_steps
     avg_rewards.append(average_ll_performance)
 
-    actor.distribution.enforce_minimum_std((torch.ones(act_dim)*0.2).to(device))
+    actor.distribution.enforce_minimum_std(
+        (torch.ones(act_dim)*0.2).to(device))
 
     end = time.time()
 
@@ -427,11 +429,14 @@ for update in range(1000000):
 
     print('----------------------------------------------------')
     print('{:>6}th iteration'.format(update))
-    print('{:<40} {:>6}'.format("average ll reward: ", '{:0.10f}'.format(average_ll_performance)))
+    print('{:<40} {:>6}'.format("average ll reward: ",
+          '{:0.10f}'.format(average_ll_performance)))
     # print('{:<40} {:>6}'.format("sin fitting reward: ", '{:0.10f}'.format(np.mean(sin_fitting_loss))))
     print('{:<40} {:>6}'.format("dones: ", '{:0.6f}'.format(average_dones)))
-    print('{:<40} {:>6}'.format("time elapsed in this iteration: ", '{:6.4f}'.format(end - start)))
-    print('{:<40} {:>6}'.format("fps: ", '{:6.0f}'.format(total_steps / (end - start))))
+    print('{:<40} {:>6}'.format(
+        "time elapsed in this iteration: ", '{:6.4f}'.format(end - start)))
+    print('{:<40} {:>6}'.format(
+        "fps: ", '{:6.0f}'.format(total_steps / (end - start))))
     print('{:<40} {:>6}'.format("real time factor: ", '{:6.0f}'.format(total_steps / (end - start)
                                                                        * cfg['environment']['control_dt'])))
     print('std: ')

@@ -117,11 +117,12 @@ class PPO:
         if self.logger == 'tb':
             if type == 'reward':
                 self.writer.add_scalar('Reward/torque/mean', np.mean(log_value[:, 0]), step)
-                self.writer.add_scalar('Reward/torque/std', np.std(log_value[:, 0]), step)
+                # self.writer.add_scalar('Reward/torque/std', np.std(log_value[:, 0]), step)
                 self.writer.add_scalar('Reward/velocity/mean', np.mean(log_value[:, 1]), step)
-                self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
+                # self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
                 self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 2]), step)
-                self.writer.add_scalar('Reward/GRF_entropy/std', np.std(log_value[:, 2]), step)
+                # self.writer.add_scalar('Reward/GRF_entropy/std', np.std(log_value[:, 2]), step)
+                self.writer.add_scalar('Reward/impulse/mean', np.mean(log_value[:, 3]), step)
             elif type == 'action':
                 # amplitude
                 self.writer.add_scalar('CPG_tranform/FR_amplitude/mean', np.mean(log_value[:, 0]), step)
