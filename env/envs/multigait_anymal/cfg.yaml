@@ -17,10 +17,10 @@ environment:
     torque:
       coeff: -4e-5
     GRF_entropy:
-      coeff: 0.1
+      coeff: 0.0
     impulse:
       coeff: 0.0
-  velocity: 0.6
+  velocity: 1
 
 architecture:
   policy_net: [128, 128]

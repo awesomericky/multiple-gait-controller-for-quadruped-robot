@@ -151,7 +151,7 @@ namespace raisim
             rewards_.record("torque", (gv_ * torque.tail(8)).array().abs().sum() * control_dt_);
             rewards_.record("forwardVel_difference", std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)));
             rewards_.record("GRF_entropy", GRF_entropy);
-            rewards_.record("impulse", -GRF_impulse.sum() / 4);
+            rewards_.record("impulse", GRF_impulse_reward);
 
             return rewards_.sum();
         }
@@ -162,7 +162,7 @@ namespace raisim
             reward_log[0] = (gv_ * torque.tail(8)).array().abs().sum() * control_dt_ * reward_torque_coeff;
             reward_log[1] = std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)) * reward_velocity_coeff;
             reward_log[2] = GRF_entropy * reward_GRF_coeff;
-            reward_log[3] = -(GRF_impulse.sum() / 4) * reward_impulse_coeff;
+            reward_log[3] = GRF_impulse_reward * reward_impulse_coeff;
 
             rewards = reward_log.cast<float>();
         }
@@ -217,7 +217,10 @@ namespace raisim
                 }
             }
 
-            if (total_contact_impulse.sum() < 1e-5) {
+            // std::cout << "total_contact_impulse" << total_contact_impulse.sum() << std::endl;
+            // std::cout << "GRF_impulse.sum()" << GRF_impulse.sum() << std::endl;
+
+            if (total_contact_impulse.sum() < 1e-4) {
                 /// almost no contact between foot and ground
                 GRF_entropy = 0.0;
             }
@@ -228,6 +231,14 @@ namespace raisim
                 // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
                 // std::cout << "Entropy" << total_contact_impulse.format(CommaInitFmt) << std::endl;
                 GRF_entropy = -(total_contact_impulse * total_contact_impulse.log()).sum();
+            }
+
+            if (GRF_impulse.sum() < 1e-4) {
+                /// almost no contact between foot and ground
+                GRF_impulse_reward = 0.0;
+            }
+            else {
+                GRF_impulse_reward = 1 / (GRF_impulse.sum() / 4);
             }
 
             // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
@@ -263,7 +274,7 @@ namespace raisim
         raisim::ArticulatedSystem *anymal_;
         Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_, pTarget12_, vTarget_, torque;
         double terminalRewardCoeff_ = -10., velocity, desired_velocity, reward_torque_coeff;
-        double reward_velocity_coeff, reward_GRF_coeff, reward_impulse_coeff, GRF_entropy;
+        double reward_velocity_coeff, reward_GRF_coeff, reward_impulse_coeff, GRF_entropy, GRF_impulse_reward;
         Eigen::VectorXd actionMean_, actionStd_, obDouble_, reward_log;
         Eigen::VectorXd single_contact_impulse;
         Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;

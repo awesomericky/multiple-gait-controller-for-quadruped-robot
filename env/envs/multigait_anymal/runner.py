@@ -91,8 +91,10 @@ env = VecEnv(multigait_anymal.RaisimGymEnv(home_path + "/rsc",
 
 # shortcuts
 ob_dim = env.num_obs  # 26 (w/ HAA joints fixed)
-act_dim = env.num_acts  # 12 (w/ HAA joints fixed)
+# act_dim = env.num_acts  # 12 (w/ HAA joints fixed)
 # act_dim = env.num_acts - 4
+# act_dim = env.num_acts + 4
+act_dim = env.num_acts - 2
 target_signal_dim = 0
 
 # Training
@@ -178,16 +180,12 @@ period = 0.7  # [s]
 period_param = 2 * np.pi / period  # period:
 LF_HFE_target = [1, np.pi]
 RF_HFE_target = [1, 0]
-LH_HFE_target = [1, 0]
-RH_HFE_target = [1, np.pi]
-target_signal[0] = sin(t_range, 0.7, period_param *
-                       LF_HFE_target[0], LF_HFE_target[1], 0.1)
-target_signal[1] = sin(t_range, 0.7, period_param *
-                       RF_HFE_target[0], RF_HFE_target[1], 0.1)
-target_signal[2] = sin(t_range, 0.7, period_param *
-                       LH_HFE_target[0], LH_HFE_target[1], 0.1)
-target_signal[3] = sin(t_range, 0.7, period_param *
-                       RH_HFE_target[0], RH_HFE_target[1], 0.1)
+LH_HFE_target = [1, np.pi]
+RH_HFE_target = [1, 0]
+target_signal[0] = sin(t_range, 1, period_param * LF_HFE_target[0], LF_HFE_target[1], 0.5)
+target_signal[1] = sin(t_range, 1, period_param * RF_HFE_target[0], RF_HFE_target[1], 0.5)
+target_signal[2] = sin(t_range, 1, period_param * LH_HFE_target[0], LH_HFE_target[1], 0.5)
+target_signal[3] = sin(t_range, 1, period_param * RH_HFE_target[0], RH_HFE_target[1], 0.5)
 
 env_action = np.zeros((cfg['environment']['num_envs'], 8), dtype=np.float32)
 
@@ -273,20 +271,27 @@ for update in range(1000000):
         if update % 50 == 0:
             joint_history[step] = non_obs[0, 4]
 
-        # env_action[:, [0, 2, 4, 6]] = action[:, 0][:, np.newaxis] * target_signal[:, step] + action[:, 1][:, np.newaxis]
-        # env_action[:, [1, 3, 5, 7]] = action[:, 2:]
-
-        # env_action[:, [0, 2, 4, 6]] = action[:, :4] * target_signal[:, step] + action[:, 4:8]
-        # env_action[:, [1, 3, 5, 7]] = action[:, 8:]
-
-        # # env_action[:, [0, 2, 4, 6]] = target_signal[:, step] + action[:, :4]
-        # # env_action[:, [1, 3, 5, 7]] =  action[:, 4:]
-
         # action[:, [8, 10, 12, 14]] = action[:, :4] * target_signal[:, step] + action[:, 4:8] + action[:, [8, 10, 12, 14]]
         # action[:, [0, 2, 4, 6]] = np.tile(A[:, np.newaxis], (1, 4)) * target_signal[:, step] + action[:, [0, 2, 4, 6]]
 
-        # reward, dones = env.step(env_action)
-        reward, dones = env.step(action)
+        # # Architecture 1
+        # env_action[:, [0, 2, 4, 6]] = target_signal[:, step] + action[:, :4]
+        # env_action[:, [1, 3, 5, 7]] =  action[:, 4:]
+
+        # # Architecture 2
+        # env_action[:, [0, 2, 4, 6]] = target_signal[:, step]
+        # env_action[:, [1, 3, 5, 7]] =  action
+
+        # # Architecture 4
+        # env_action[:, [0, 2, 4, 6]] = action[:, :4] * target_signal[:, step] + action[:, 4:8]
+        # env_action[:, [1, 3, 5, 7]] = action[:, 8:]
+
+        # Architecture 5
+        env_action[:, [0, 2, 4, 6]] = action[:, 0][:, np.newaxis] * target_signal[:, step] + action[:, 1][:, np.newaxis]
+        env_action[:, [1, 3, 5, 7]] = action[:, 2:]
+
+        reward, dones = env.step(env_action)
+        # reward, dones = env.step(action)
         ppo.step(value_obs=obs, rews=reward, dones=dones)
         done_sum = done_sum + sum(dones)
         reward_ll_sum = reward_ll_sum + sum(reward)
