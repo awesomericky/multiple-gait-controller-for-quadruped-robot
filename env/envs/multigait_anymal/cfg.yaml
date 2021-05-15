@@ -15,7 +15,7 @@ environment:
     forwardVel_difference:
       coeff: 0.3
     torque:
-      coeff: -4e-5
+      coeff: -12e-5
     GRF_entropy:
       coeff: 0.0
     impulse:

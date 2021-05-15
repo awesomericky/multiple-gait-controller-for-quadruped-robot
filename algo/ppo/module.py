@@ -18,16 +18,17 @@ class Actor:
     def sample(self, obs):
         logits = self.architecture.architecture(obs)
         # logits[:, :4] = F.relu(logits[:, :4])  # clipping amplitude (Architecture 4)
-        logits[:, 0] = F.relu(logits[:, 0])  # clipping amplitude (Architecture 5)
+        logits[:, 0] = torch.relu(logits[:, 0])  # clipping amplitude (Architecture 5)
+        logits[:, 1:] = torch.tanh(logits[:, 1:])  # clipping shaft & calf (Architecture 5)
         actions, log_prob = self.distribution.sample(logits)
         # actions[:, :4] = F.relu(actions[:, :4])  # clipping amplitude (Architecture 4)
-        actions[:, 0] = F.relu(actions[:, 0])  # clipping amplitude (Architecture 5)
+        actions[:, 0] = torch.relu(actions[:, 0])  # clipping amplitude (Architecture 5)
         return actions.cpu().detach(), log_prob.cpu().detach()
 
     def evaluate(self, obs, actions):
         action_mean = self.architecture.architecture(obs)
         # action_mean_clipped = torch.cat((F.relu(action_mean[:, :4]), action_mean[:, 4:]), dim=1)  # clipping amplitude (Architecture 4)
-        action_mean_clipped = torch.cat((F.relu(action_mean[:, 0]).unsqueeze(-1), action_mean[:, 1:]), dim=1)  # clipping amplitude (Architecture 5)
+        action_mean_clipped = torch.cat((torch.relu(action_mean[:, 0]).unsqueeze(-1), torch.tanh(action_mean[:, 1:])), dim=1)  # clipping amplitude & shaft & calf (Architecture 5)
         return self.distribution.evaluate(obs, action_mean_clipped, actions)  # clipping amplitude (Architecture 4, 5)
         # return self.distribution.evaluate(obs, action_mean, actions)
 

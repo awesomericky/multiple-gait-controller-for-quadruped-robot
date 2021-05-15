@@ -178,14 +178,14 @@ t_range = np.arange(n_steps*2) * cfg['environment']['control_dt']
 target_signal = np.zeros((4, n_steps*2))
 period = 0.7  # [s]
 period_param = 2 * np.pi / period  # period:
-LF_HFE_target = [1, np.pi]
-RF_HFE_target = [1, 0]
-LH_HFE_target = [1, np.pi]
-RH_HFE_target = [1, 0]
-target_signal[0] = sin(t_range, 1, period_param * LF_HFE_target[0], LF_HFE_target[1], 0.5)
-target_signal[1] = sin(t_range, 1, period_param * RF_HFE_target[0], RF_HFE_target[1], 0.5)
-target_signal[2] = sin(t_range, 1, period_param * LH_HFE_target[0], LH_HFE_target[1], 0.5)
-target_signal[3] = sin(t_range, 1, period_param * RH_HFE_target[0], RH_HFE_target[1], 0.5)
+FR_target = np.pi
+FL_target = 0
+RR_target = 0
+RL_target = np.pi
+target_signal[0] = sin(t_range, 1, period_param, FR_target, 0.0)
+target_signal[1] = sin(t_range, 1, period_param, FL_target, 0.0)
+target_signal[2] = sin(t_range, 1, period_param, RR_target, 0.0)
+target_signal[3] = sin(t_range, 1, period_param, RL_target, 0.0)
 
 env_action = np.zeros((cfg['environment']['num_envs'], 8), dtype=np.float32)
 
@@ -221,7 +221,7 @@ for update in range(1000000):
     # target_signal.extend(RH_HFE_target)
     # target_signal = np.asarray(target_signal)
     # target_signal = np.broadcast_to(target_signal, (cfg['environment']['num_envs'], target_signal.shape[0]))
-    """
+    
     if update % cfg['environment']['eval_every_n'] == 0:
         print("Visualizing and evaluating the current policy")
         torch.save({
@@ -243,8 +243,8 @@ for update in range(1000000):
             # obs_and_target = np.concatenate((obs, target_signal), axis=1, dtype=np.float32)
             action_ll = loaded_graph.architecture(torch.from_numpy(obs))
             action_ll = action_ll.cpu().detach().numpy()
-            env_action[:, [0, 2, 4, 6]] = action_ll[:, :4] * target_signal[:, step] + action_ll[:, 4:8]
-            env_action[:, [1, 3, 5, 7]] = action_ll[:, 8:]
+            env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * target_signal[:, step] + action_ll[:, 1][:, np.newaxis]
+            env_action[:, [1, 3, 5, 7]] = action_ll[:, 2:]
             reward_ll, dones = env.step(env_action)
             frame_end = time.time()
             wait_time = cfg['environment']['control_dt'] - (frame_end-frame_start)
@@ -256,10 +256,17 @@ for update in range(1000000):
 
         env.reset()
         env.save_scaling(saver.data_dir, str(update))
-    """
+    
     # amplitude_history = np.zeros(n_steps)
     # shaft_history = np.zeros(n_steps)
-    joint_history = np.zeros(n_steps)
+    FR_thigh_joint_history = np.zeros(n_steps)
+    FR_calf_joint_history = np.zeros(n_steps)
+    FL_thigh_joint_history = np.zeros(n_steps)
+    FL_calf_joint_history = np.zeros(n_steps)
+    RR_thigh_joint_history = np.zeros(n_steps)
+    RR_calf_joint_history = np.zeros(n_steps)
+    RL_thigh_joint_history = np.zeros(n_steps)
+    RL_calf_joint_history = np.zeros(n_steps)
 
     # actual training
     for step in range(n_steps):
@@ -269,7 +276,14 @@ for update in range(1000000):
         # amplitude_history[step] = action[0, 0]
         # shaft_history[step] = action[0, 4]
         if update % 50 == 0:
-            joint_history[step] = non_obs[0, 4]
+            FR_thigh_joint_history[step] = non_obs[0, 4]
+            FR_calf_joint_history[step] = non_obs[0, 5]
+            FL_thigh_joint_history[step] = non_obs[0, 6]
+            FL_calf_joint_history[step] = non_obs[0, 7]
+            RR_thigh_joint_history[step] = non_obs[0, 8]
+            RR_calf_joint_history[step] = non_obs[0, 9]
+            RL_thigh_joint_history[step] = non_obs[0, 10]
+            RL_calf_joint_history[step] = non_obs[0,11]
 
         # action[:, [8, 10, 12, 14]] = action[:, :4] * target_signal[:, step] + action[:, 4:8] + action[:, [8, 10, 12, 14]]
         # action[:, [0, 2, 4, 6]] = np.tile(A[:, np.newaxis], (1, 4)) * target_signal[:, step] + action[:, [0, 2, 4, 6]]
@@ -296,10 +310,12 @@ for update in range(1000000):
         done_sum = done_sum + sum(dones)
         reward_ll_sum = reward_ll_sum + sum(reward)
 
-        if step % 100 == 0 and 1 < cfg['environment']['num_envs']:
+        if (update % 5 == 0) and (step + 1) % 100 == 0 and 1 < cfg['environment']['num_envs']:
             env.reward_logging()
-            ppo.extra_log(env.reward_log, update*n_steps + step, type='reward')
-            # ppo.extra_log(action[:, :8], update*n_steps + step, type='action')
+            ppo.extra_log(env.reward_log, (update // 5) * n_steps + step, type='reward')
+        
+        if update % 10 == 0:
+            ppo.extra_log(action, (update // 10) * n_steps + step, type='action')
 
         # LF_HFE_history.append(obs[:, 4])
         # RF_HFE_history.append(obs[:, 7])
@@ -307,9 +323,51 @@ for update in range(1000000):
         # RH_HFE_history.append(obs[:, 13])
 
     if update % 50 == 0:
-        plt.plot(t_range[:n_steps], joint_history, 'o')
-        plt.plot(t_range[:n_steps], target_signal[0, :n_steps])
-        plt.savefig('plot.png')
+        fig, ax = plt.subplots(2,2,figsize=(40,25))
+
+        # FR_thigh
+        ax[0, 0].plot(t_range[:n_steps], FR_thigh_joint_history, 'o')
+        ax[0, 0].plot(t_range[:n_steps], target_signal[0, :n_steps])
+        ax[0, 0].set_title('FR')
+
+        # FL_thigh
+        ax[0, 1].plot(t_range[:n_steps], FL_thigh_joint_history, 'o')
+        ax[0, 1].plot(t_range[:n_steps], target_signal[1, :n_steps])
+        ax[0, 1].set_title('FL')
+
+        # RR_thigh
+        ax[1, 0].plot(t_range[:n_steps], RR_thigh_joint_history, 'o')
+        ax[1, 0].plot(t_range[:n_steps], target_signal[2, :n_steps])
+        ax[1, 0].set_title('RR')
+
+        # RL_thigh
+        ax[1, 1].plot(t_range[:n_steps], RL_thigh_joint_history, 'o')
+        ax[1, 1].plot(t_range[:n_steps], target_signal[3, :n_steps])
+        ax[1, 1].set_title('RL')
+
+        plt.savefig(f'joint_plot/Thigh_joint_angle_{update}.png')
+        plt.close()
+
+
+        fig, ax = plt.subplots(2,2,figsize=(40,25))
+
+        # FR_calf
+        ax[0, 0].plot(t_range[:n_steps], FR_calf_joint_history, 'o')
+        ax[0, 0].set_title('FR')
+
+        # FL_calf
+        ax[0, 1].plot(t_range[:n_steps], FL_calf_joint_history, 'o')
+        ax[0, 1].set_title('FL')
+
+        # RR_calf
+        ax[1, 0].plot(t_range[:n_steps], RR_calf_joint_history, 'o')
+        ax[1, 0].set_title('RR')
+
+        # RL_calf
+        ax[1, 1].plot(t_range[:n_steps], RL_calf_joint_history, 'o')
+        ax[1, 1].set_title('RL')
+
+        plt.savefig(f'joint_plot/Calf_joint_angle_{update}.png')
         plt.close()
 
     # Fitting sine model
@@ -397,15 +455,12 @@ for update in range(1000000):
     predict_RH_HFE = sin(x_range, 1, RH_HFE_param[0, 0], RH_HFE_param[0, 1], 0)
 
     fig = plt.figure()
-    ax0 = fig.add_subplot(3, 1, 1)
     ax0.plot(x_range, true_RF_HFE, label='true')
     ax0.plot(x_range, predict_RF_HFE, label='predict')
     ax0.set_title('RF_HFE')
-    ax1 = fig.add_subplot(3, 1, 2)
     ax1.plot(x_range, true_LH_HFE, label='true')
     ax1.plot(x_range, predict_LH_HFE, label='predict')
     ax1.set_title('LH_HFE')
-    ax2 = fig.add_subplot(3, 1, 3)
     ax2.plot(x_range, true_RH_HFE, label='true')
     ax2.plot(x_range, predict_RH_HFE, label='predict')
     ax2.set_title('RH_HFE')
