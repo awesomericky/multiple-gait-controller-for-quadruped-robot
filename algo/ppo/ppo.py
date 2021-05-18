@@ -120,9 +120,11 @@ class PPO:
                 # self.writer.add_scalar('Reward/torque/std', np.std(log_value[:, 0]), step)
                 self.writer.add_scalar('Reward/velocity/mean', np.mean(log_value[:, 1]), step)
                 # self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
-                self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 2]), step)
+                self.writer.add_scalar('Reward/height/mean', np.mean(log_value[:, 2]), step)
+                self.writer.add_scalar('Reward/orientation/mean', np.mean(log_value[:, 3]), step)
+                # self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 4]), step)
                 # self.writer.add_scalar('Reward/GRF_entropy/std', np.std(log_value[:, 2]), step)
-                self.writer.add_scalar('Reward/impulse/mean', np.mean(log_value[:, 3]), step)
+                # self.writer.add_scalar('Reward/impulse/mean', np.mean(log_value[:, 5]), step)
             elif type == 'action':
                 # Architecture 5
                 self.writer.add_scalar('CPG_tranform/Thigh_amplitude/mean', np.mean(log_value[:, 0]), step)

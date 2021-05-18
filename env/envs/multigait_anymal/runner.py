@@ -13,20 +13,17 @@ import torch
 import datetime
 import argparse
 import wandb
-from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 import pdb
 
 """
 # TODO
 
-(5/12) 1. reward shaping: 1) low height (stability), 2) no orientation change 3) GRF entropy maximize
-+) how could the 4 legs have similar load (currently just front two legs get the whole load)
+1. Check contact map ==> check real phase
+2. Record video
+# 3. Add friction work + contact pattern reward ==> leg work entropy
+4. Think way for hierarchical RL w/ reward
 
-(5/13) 1. total impulse sum minimize (impulse derivative minimize) 
-       2. equation and policy update check
-       3. add direction following
-       4. simulation real time
 """
 
 
@@ -39,18 +36,6 @@ def shift_sin_param(param1, param2, mean_param):
     new_param -= (new_param // (2*np.pi)) * (2*np.pi)
     assert (0 <= new_param).all() and (new_param < 2*np.pi).all()
     return new_param
-
-# def shift_sin_param(fix_param, move_param):
-#     fix_param_0 = fix_param[:, 0]
-#     fix_param_1 = fix_param[:, 1]
-#     move_param_0 = move_param[:, 0]
-#     move_param_1 = move_param[:, 1]
-#     shift_param_0 = move_param_0 / (fix_param_0 + 1e-4)
-#     shift_param_1 = move_param_1 - (fix_param_1 / (fix_param_0 + 1e-4)) * move_param_0
-#     shift_param = np.concatenate((shift_param_0[:, np.newaxis], shift_param_1[:, np.newaxis]), axis=1)
-
-#     return shift_param
-
 
 # task specification
 task_name = "multigait_anymal"
@@ -180,8 +165,8 @@ period = 0.7  # [s]
 period_param = 2 * np.pi / period  # period:
 FR_target = np.pi
 FL_target = 0
-RR_target = 0
-RL_target = np.pi
+RR_target = np.pi
+RL_target = 0
 target_signal[0] = sin(t_range, 1, period_param, FR_target, 0.0)
 target_signal[1] = sin(t_range, 1, period_param, FL_target, 0.0)
 target_signal[2] = sin(t_range, 1, period_param, RR_target, 0.0)
@@ -196,32 +181,6 @@ for update in range(1000000):
     done_sum = 0
     average_dones = 0.
 
-    # LF_HFE_history = []
-    # RF_HFE_history = []
-    # LH_HFE_history = []
-    # RH_HFE_history = []
-
-    # Target
-    # Trot
-    # LF_HFE_target = [1, 0]
-    # RF_HFE_target = [1, np.pi]
-    # LH_HFE_target = [1, np.pi]
-    # RH_HFE_target = [1, 0]
-
-    # Pace
-    # LF_HFE_target = [1, 0]
-    # RF_HFE_target = [1, np.pi]
-    # LH_HFE_target = [1, 0]
-    # RH_HFE_target = [1, np.pi]
-
-    # target_signal = []    # [LF_HFE, RF_HFE, LH_HFE, RH_HFE]
-    # target_signal.extend(LF_HFE_target)
-    # target_signal.extend(RF_HFE_target)
-    # target_signal.extend(LH_HFE_target)
-    # target_signal.extend(RH_HFE_target)
-    # target_signal = np.asarray(target_signal)
-    # target_signal = np.broadcast_to(target_signal, (cfg['environment']['num_envs'], target_signal.shape[0]))
-    
     if update % cfg['environment']['eval_every_n'] == 0:
         print("Visualizing and evaluating the current policy")
         torch.save({
@@ -237,6 +196,8 @@ for update in range(1000000):
         env.turn_on_visualization()
         env.start_video_recording(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "policy_"+str(update)+'.mp4')
 
+        contact_log = np.zeros((4, n_steps*2), dtype=np.float32) # 0: FR, 1: FL, 2: RR, 3:RL
+
         for step in range(n_steps*2):
             frame_start = time.time()
             obs = env.observe(False)
@@ -250,6 +211,19 @@ for update in range(1000000):
             wait_time = cfg['environment']['control_dt'] - (frame_end-frame_start)
             if wait_time > 0.:
                 time.sleep(wait_time)
+            
+            # contact logging
+            env.contact_logging()
+            contact_log[:, step] = env.contact_log[0, :]
+        
+        # save & plot contact log
+        np.savez_compressed(f'contact_plot/contact_{update}.npz', contact=contact_log)
+        fig = plt.figure(figsize=(20,10))
+        plt.imshow(contact_log, cmap='Greys')
+        plt.colorbar()
+        plt.title("contact", fontsize=25)
+        plt.savefig(f'contact_plot/contact_{update}.png')
+        plt.close()
 
         env.stop_video_recording()
         env.turn_off_visualization()
@@ -294,7 +268,7 @@ for update in range(1000000):
 
         # # Architecture 2
         # env_action[:, [0, 2, 4, 6]] = target_signal[:, step]
-        # env_action[:, [1, 3, 5, 7]] =  action
+        # env_action[:, [1, 3, 5, 7]] =  action`
 
         # # Architecture 4
         # env_action[:, [0, 2, 4, 6]] = action[:, :4] * target_signal[:, step] + action[:, 4:8]
@@ -316,6 +290,7 @@ for update in range(1000000):
         
         if update % 10 == 0:
             ppo.extra_log(action, (update // 10) * n_steps + step, type='action')
+        
 
         # LF_HFE_history.append(obs[:, 4])
         # RF_HFE_history.append(obs[:, 7])
@@ -323,152 +298,62 @@ for update in range(1000000):
         # RH_HFE_history.append(obs[:, 13])
 
     if update % 50 == 0:
-        fig, ax = plt.subplots(2,2,figsize=(40,25))
+        fig, ax = plt.subplots(2,2,figsize=(28, 15))
 
         # FR_thigh
-        ax[0, 0].plot(t_range[:n_steps], FR_thigh_joint_history, 'o')
-        ax[0, 0].plot(t_range[:n_steps], target_signal[0, :n_steps])
-        ax[0, 0].set_title('FR')
+        ax[0, 0].plot(t_range[:n_steps], FR_thigh_joint_history, 'o', label='joint angle [rad]')
+        ax[0, 0].plot(t_range[:n_steps], target_signal[0, :n_steps], label='signal')
+        ax[0, 0].set_xlabel('time [s]', fontsize=20)
+        ax[0, 0].set_title('FR', fontsize=25)
 
         # FL_thigh
-        ax[0, 1].plot(t_range[:n_steps], FL_thigh_joint_history, 'o')
-        ax[0, 1].plot(t_range[:n_steps], target_signal[1, :n_steps])
-        ax[0, 1].set_title('FL')
+        ax[0, 1].plot(t_range[:n_steps], FL_thigh_joint_history, 'o', label='joint angle [rad]')
+        ax[0, 1].plot(t_range[:n_steps], target_signal[1, :n_steps], label='signal')
+        ax[0, 1].set_xlabel('time [s]', fontsize=20)
+        ax[0, 1].set_title('FL', fontsize=25)
 
         # RR_thigh
-        ax[1, 0].plot(t_range[:n_steps], RR_thigh_joint_history, 'o')
-        ax[1, 0].plot(t_range[:n_steps], target_signal[2, :n_steps])
-        ax[1, 0].set_title('RR')
+        ax[1, 0].plot(t_range[:n_steps], RR_thigh_joint_history, 'o', label='joint angle [rad]')
+        ax[1, 0].plot(t_range[:n_steps], target_signal[2, :n_steps], label='signal')
+        ax[1, 0].set_xlabel('time [s]', fontsize=20)
+        ax[1, 0].set_title('RR', fontsize=25)
 
         # RL_thigh
-        ax[1, 1].plot(t_range[:n_steps], RL_thigh_joint_history, 'o')
-        ax[1, 1].plot(t_range[:n_steps], target_signal[3, :n_steps])
-        ax[1, 1].set_title('RL')
+        ax[1, 1].plot(t_range[:n_steps], RL_thigh_joint_history, 'o', label='joint angle [rad]')
+        ax[1, 1].plot(t_range[:n_steps], target_signal[3, :n_steps], label='signal')
+        ax[1, 1].set_xlabel('time [s]', fontsize=20)
+        ax[1, 1].set_title('RL', fontsize=25)
 
+        plt.legend()
         plt.savefig(f'joint_plot/Thigh_joint_angle_{update}.png')
         plt.close()
 
 
-        fig, ax = plt.subplots(2,2,figsize=(40,25))
+        fig, ax = plt.subplots(2,2,figsize=(28,15))
 
         # FR_calf
-        ax[0, 0].plot(t_range[:n_steps], FR_calf_joint_history, 'o')
-        ax[0, 0].set_title('FR')
+        ax[0, 0].plot(t_range[:n_steps], FR_calf_joint_history, 'o', label='joint angle [rad]')
+        ax[0, 0].set_title('FR', fontsize=25)
+        ax[0, 0].set_xlabel('time [s]', fontsize=20)
 
         # FL_calf
-        ax[0, 1].plot(t_range[:n_steps], FL_calf_joint_history, 'o')
-        ax[0, 1].set_title('FL')
+        ax[0, 1].plot(t_range[:n_steps], FL_calf_joint_history, 'o', label='joint angle [rad]')
+        ax[0, 1].set_title('FL', fontsize=25)
+        ax[0, 1].set_xlabel('time [s]', fontsize=20)
 
         # RR_calf
-        ax[1, 0].plot(t_range[:n_steps], RR_calf_joint_history, 'o')
-        ax[1, 0].set_title('RR')
+        ax[1, 0].plot(t_range[:n_steps], RR_calf_joint_history, 'o', label='joint angle [rad]')
+        ax[1, 0].set_title('RR', fontsize=25)
+        ax[1, 0].set_xlabel('time [s]', fontsize=20)
 
         # RL_calf
-        ax[1, 1].plot(t_range[:n_steps], RL_calf_joint_history, 'o')
-        ax[1, 1].set_title('RL')
+        ax[1, 1].plot(t_range[:n_steps], RL_calf_joint_history, 'o', label='joint angle [rad]')
+        ax[1, 1].set_title('RL', fontsize=25)
+        ax[1, 1].set_xlabel('time [s]', fontsize=20)
 
+        plt.legend()
         plt.savefig(f'joint_plot/Calf_joint_angle_{update}.png')
         plt.close()
-
-    # Fitting sine model
-    # t_range = np.arange(n_steps) * cfg['environment']['control_dt']
-    # LF_HFE_history = np.asarray(LF_HFE_history).T  # (n_env, n_steps)
-    # RF_HFE_history = np.asarray(RF_HFE_history).T
-    # LH_HFE_history = np.asarray(LH_HFE_history).T
-    # RH_HFE_history = np.asarray(RH_HFE_history).T
-
-    # sin_fitting_loss = 0
-
-    # LF_HFE_param = np.zeros((cfg['environment']['num_envs'], 2))
-    # LF_HFE_param_cov = np.zeros((cfg['environment']['num_envs'], 2))
-    # RF_HFE_param = np.zeros((cfg['environment']['num_envs'], 2))
-    # RF_HFE_param_cov = np.zeros((cfg['environment']['num_envs'], 2))
-    # LH_HFE_param = np.zeros((cfg['environment']['num_envs'], 2))
-    # LH_HFE_param_cov = np.zeros((cfg['environment']['num_envs'], 2))
-    # RH_HFE_param = np.zeros((cfg['environment']['num_envs'], 2))
-    # RH_HFE_param_cov = np.zeros((cfg['environment']['num_envs'], 2))
-
-    # for i in range(cfg['environment']['num_envs']):
-    #     try:
-    #         param, param_cov = curve_fit(sin, t_range, LF_HFE_history[i], p0=[1, 2*np.pi/DESIRED_VELOCITY, 0, 0])
-    #         LF_HFE_param[i] = param[1:3]
-    #         LF_HFE_param_cov[i] = np.diag(param_cov)[1:3]
-
-    #         """
-    #         # Plot Observation & Curve fit model
-
-    #         plt.plot(t_range, LF_HFE_history[i], 'o')
-    #         predict = sin(t_range, param[0], param[1], param[2], param[3])
-    #         plt.plot(t_range, predict)
-    #         plt.show()
-    #         pdb.set_trace()
-    #         plt.show()
-    #         """
-    #     except:
-    #         print('curve fit error (LF_HFE)')
-    #     try:
-    #         param, param_cov = curve_fit(sin, t_range, RF_HFE_history[i], p0=[1, 2*np.pi/DESIRED_VELOCITY, 0, 0])
-    #         RF_HFE_param[i] = param[1:3]
-    #         RF_HFE_param_cov[i] = np.diag(param_cov)[1:3]
-    #     except:
-    #         print('curve fit error (RF_HFE)')
-    #     try:
-    #         param, param_cov = curve_fit(sin, t_range, LH_HFE_history[i], p0=[1, 2*np.pi/DESIRED_VELOCITY, 0, 0])
-    #         LH_HFE_param[i] = param[1:3]
-    #         LH_HFE_param_cov[i] = np.diag(param_cov)[1:3]
-    #     except:
-    #         print('curve fit error (LH_HFE)')
-    #     try:
-    #         param, param_cov = curve_fit(sin, t_range, RH_HFE_history[i], p0=[1, 2*np.pi/DESIRED_VELOCITY, 0, 0])
-    #         RH_HFE_param[i] = param[1:3]
-    #         RH_HFE_param_cov[i] = np.diag(param_cov)[1:3]
-    #     except:
-    #         print('curve fit error (RH_HFE)')
-
-    # signal_freq = np.concatenate((LF_HFE_param[:, 0][:, np.newaxis], RF_HFE_param[:, 0][:, np.newaxis], \
-    #                             LH_HFE_param[:, 0][:, np.newaxis], RH_HFE_param[:, 0][:, np.newaxis]), axis=1)
-    # signal_freq_mean = np.mean(signal_freq, axis=1)
-    # signal_freq_std = np.std(signal_freq, axis=1)
-
-    # RF_HFE_param = shift_sin_param(RF_HFE_param[:, 1], LF_HFE_param[:, 1], signal_freq_mean)
-    # LH_HFE_param = shift_sin_param(LH_HFE_param[:, 1], LF_HFE_param[:, 1], signal_freq_mean)
-    # RH_HFE_param = shift_sin_param(RH_HFE_param[:, 1], LF_HFE_param[:, 1], signal_freq_mean)
-
-    # sin_fitting_loss -= (RF_HFE_param - RF_HFE_target[-1])**2
-    # sin_fitting_loss -= (LH_HFE_param - LH_HFE_target[-1])**2
-    # sin_fitting_loss -= (RH_HFE_param - RH_HFE_target[-1])**2
-    # sin_fitting_loss -= signal_freq_std
-    # # sin_fitting_loss *= 10
-
-    """
-
-    print(f"[RF_HFE] True: ({RF_HFE_target[0]}, {RF_HFE_target[1]}) | Predict: ({RF_HFE_param[0, 0]}, {RF_HFE_param[0, 0]}) ")
-    print(f"[LH_HFE] True: ({LH_HFE_target[0]}, {LH_HFE_target[1]}) | Predict: ({LH_HFE_param[0, 0]}, {LH_HFE_param[0, 0]}) ")
-    print(f"[RF_HFE] True: ({RH_HFE_target[0]}, {RH_HFE_target[1]}) | Predict: ({RH_HFE_param[0, 0]}, {RH_HFE_param[0, 0]}) ")
-
-    x_range = np.linspace(0, 30, 300)
-    true_RF_HFE = sin(x_range, 1, RF_HFE_target[0], RF_HFE_target[1], 0)
-    predict_RF_HFE = sin(x_range, 1, RF_HFE_param[0, 0], RF_HFE_param[0, 1], 0)
-    true_LH_HFE = sin(x_range, 1, LH_HFE_target[0], LH_HFE_target[1], 0)
-    predict_LH_HFE = sin(x_range, 1, LH_HFE_param[0, 0], LH_HFE_param[0, 1], 0)
-    true_RH_HFE = sin(x_range, 1, RH_HFE_target[0], RH_HFE_target[1], 0)
-    predict_RH_HFE = sin(x_range, 1, RH_HFE_param[0, 0], RH_HFE_param[0, 1], 0)
-
-    fig = plt.figure()
-    ax0.plot(x_range, true_RF_HFE, label='true')
-    ax0.plot(x_range, predict_RF_HFE, label='predict')
-    ax0.set_title('RF_HFE')
-    ax1.plot(x_range, true_LH_HFE, label='true')
-    ax1.plot(x_range, predict_LH_HFE, label='predict')
-    ax1.set_title('LH_HFE')
-    ax2.plot(x_range, true_RH_HFE, label='true')
-    ax2.plot(x_range, predict_RH_HFE, label='predict')
-    ax2.set_title('RH_HFE')
-    plt.legend()
-    plt.show()
-    pdb.set_trace()
-    plt.close()
-    """
 
     # take st step to get value obs
     obs, _ = env.observe_logging()
@@ -484,6 +369,7 @@ for update in range(1000000):
         (torch.ones(act_dim)*0.2).to(device))
 
     end = time.time()
+    # pdb.set_trace()
 
     # wandb.log({'amplitude std': np.std(amplitude_history), 'shaft std': np.std(shaft_history)})
 

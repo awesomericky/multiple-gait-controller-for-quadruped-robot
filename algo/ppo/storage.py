@@ -63,7 +63,13 @@ class RolloutStorage:
         each_step_auxiliary_loss = torch.from_numpy(auxiliary_reward).to(self.device) / n_states_before_done  # (n_envs, 1)
         self.rewards += not_dones * each_step_auxiliary_loss.unsqueeze(0)
 
+    def reward_normalize(self):
+        self.rewards -= torch.mean(self.rewards)
+        self.rewards /= torch.std(self.rewards)
+
     def compute_returns(self, last_values, gamma, lam):
+        self.reward_normalize()  # normalize reward
+
         advantage = 0
         for step in reversed(range(self.num_transitions_per_env)):
             if step == self.num_transitions_per_env - 1:

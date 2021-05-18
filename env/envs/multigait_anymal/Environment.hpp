@@ -45,14 +45,19 @@ namespace raisim
             vTarget_.setZero(gvDim_);
             pTarget12_.setZero(nJoints_);
 
+            leg_work.setZero(4);
+
             /// desired velocity
             desired_velocity = cfg["velocity"].As<double>();
 
             /// reward constant
             reward_torque_coeff = cfg["reward"]["torque"]["coeff"].As<double>();
             reward_velocity_coeff = cfg["reward"]["forwardVel_difference"]["coeff"].As<double>();
+            reward_height_coeff = cfg["reward"]["height"]["coeff"].As<double>();
+            reward_leg_work_coeff = cfg["reward"]["leg_work_entropy"]["coeff"].As<double>();
             reward_GRF_coeff = cfg["reward"]["GRF_entropy"]["coeff"].As<double>();
             reward_impulse_coeff = cfg["reward"]["impulse"]["coeff"].As<double>();
+            reward_orientation_coeff = cfg["reward"]["orientation"]["coeff"].As<double>();
 
             /// contact foot index
             contact_foot_idx.insert(anymal_->getBodyIdx("FR_calf"));
@@ -107,12 +112,16 @@ namespace raisim
                 server_->launchServer();
                 server_->focusOn(anymal_);
             }
+
         }
 
         void init() final {}
 
         void reset() final
         {
+            // std::mt19937_64 urng{ 42 };
+            // Eigen::VectorXd random_vec = Eigen::Rand::normal<Eigen::VectorXd>(8, urng);
+            // gc_init_.segment(7, 8) = random_vec;
             anymal_->setState(gc_init_, gv_init_);
             updateObservation();
         }
@@ -147,11 +156,21 @@ namespace raisim
             torque = anymal_->getGeneralizedForce().e(); // squaredNorm
             // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
             // std::cout << "torque" << torque.format(CommaInitFmt) << std::endl;
+            joint_work = (gv_ * torque.tail(8)).array().abs() * control_dt_;
+            leg_work << joint_work[0] + joint_work[1], joint_work[2] + joint_work[3], joint_work[4] + joint_work[5], joint_work[6] + joint_work[7];
+            leg_work /= leg_work.sum();
+            leg_work += 1e-6;
+            leg_work_entropy = -(leg_work * leg_work.log()).sum();
+            // std::cout << leg_work_entropy << std::endl;
 
-            rewards_.record("torque", (gv_ * torque.tail(8)).array().abs().sum() * control_dt_);
+            rewards_.record("torque", joint_work.sum() * control_dt_);
             rewards_.record("forwardVel_difference", std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)));
-            rewards_.record("GRF_entropy", GRF_entropy);
-            rewards_.record("impulse", GRF_impulse_reward);
+            rewards_.record("height", std::exp(-std::abs(gc_[2] - gc_init_[2])));
+            rewards_.record("orientation", std::exp(-std::abs(pitch_and_yaw - 1)));
+            rewards_.record("leg_work_entropy", leg_work_entropy);
+            // std::cout << pitch_and_yaw << std::endl;
+            // rewards_.record("GRF_entropy", GRF_entropy);
+            // rewards_.record("impulse", GRF_impulse_reward);
 
             return rewards_.sum();
         }
@@ -161,10 +180,20 @@ namespace raisim
             reward_log.setZero(4);
             reward_log[0] = (gv_ * torque.tail(8)).array().abs().sum() * control_dt_ * reward_torque_coeff;
             reward_log[1] = std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)) * reward_velocity_coeff;
-            reward_log[2] = GRF_entropy * reward_GRF_coeff;
-            reward_log[3] = GRF_impulse_reward * reward_impulse_coeff;
+            reward_log[2] = std::exp(-std::abs(gc_[2] - gc_init_[2])) * reward_height_coeff;
+            reward_log[3] = std::exp(-std::abs(pitch_and_yaw - 1)) * reward_orientation_coeff;
+            reward_log[4] = leg_work_entropy * reward_leg_work_coeff;
+            // reward_log[5] = GRF_entropy * reward_GRF_coeff;
+            // reward_log[6] = GRF_impulse_reward * reward_impulse_coeff;
 
             rewards = reward_log.cast<float>();
+        }
+
+        void contact_logging(Eigen::Ref<EigenVec> contacts) final
+        {
+            contacts = GRF_impulse.cast<float>();
+            // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
+            // std::cout << contacts.format(CommaInitFmt) << std::endl;
         }
 
         void updateObservation()
@@ -185,15 +214,20 @@ namespace raisim
             bodyLinearVel_ = rot.e().transpose() * gv_.segment(0, 3);
             bodyAngularVel_ = rot.e().transpose() * gv_.segment(3, 3);
 
+            // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
+            // std::cout << "orientation" << rot.e().row(2).transpose().format(CommaInitFmt) << std::endl;
+
             obDouble_ << gc_[2],                 /// body height // dim=1
                 rot.e().row(2).transpose(),      /// body orientation // dim=3
                 gc_.tail(8),                     /// joint angles // dim=8 (w/ HAA joint fixed)
                 bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity // dim=6 (3 + 3)
                 gv_.tail(8);                     /// joint velocity // dim=8 (w/ HAA joint fixed)
 
+            pitch_and_yaw = rot.e().row(2).transpose()[2];
+
             /// z axis contact impulse for each feet (= perpendicular GRF * dt)
-            total_contact_impulse.setZero(4);
-            GRF_impulse.setZero(4);
+            // total_contact_impulse.setZero(4);  // only perpendicular GRF
+            GRF_impulse.setZero(4);  // total GRF
 
             // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
             // std::cout << "Joint" << gc_.tail(8).format(CommaInitFmt) << std::endl;
@@ -212,7 +246,7 @@ namespace raisim
                 if (contact_foot_idx.find(contact.getlocalBodyIndex()) != contact_foot_idx.end())
                 {
                     idx = int(int(contact.getlocalBodyIndex()) / 2) - 1;
-                    total_contact_impulse[idx] = std::max(double(single_contact_impulse[2]), 0.0);
+                    // total_contact_impulse[idx] = std::max(double(single_contact_impulse[2]), 0.0);
                     GRF_impulse[idx] = single_contact_impulse.squaredNorm() * control_dt_;
                 }
             }
@@ -220,26 +254,26 @@ namespace raisim
             // std::cout << "total_contact_impulse" << total_contact_impulse.sum() << std::endl;
             // std::cout << "GRF_impulse.sum()" << GRF_impulse.sum() << std::endl;
 
-            if (total_contact_impulse.sum() < 1e-4) {
-                /// almost no contact between foot and ground
-                GRF_entropy = 0.0;
-            }
-            else {
-                /// compute perpendicular GRF entropy
-                total_contact_impulse = total_contact_impulse / total_contact_impulse.sum();
-                total_contact_impulse = total_contact_impulse + 1e-6;
-                // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
-                // std::cout << "Entropy" << total_contact_impulse.format(CommaInitFmt) << std::endl;
-                GRF_entropy = -(total_contact_impulse * total_contact_impulse.log()).sum();
-            }
+            // if (total_contact_impulse.sum() < 1e-4) {
+            //     /// almost no contact between foot and ground
+            //     GRF_entropy = 0.0;
+            // }
+            // else {
+            //     /// compute perpendicular GRF entropy
+            //     total_contact_impulse = total_contact_impulse / total_contact_impulse.sum();
+            //     total_contact_impulse = total_contact_impulse + 1e-6;
+            //     // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
+            //     // std::cout << "Entropy" << total_contact_impulse.format(CommaInitFmt) << std::endl;
+            //     GRF_entropy = -(total_contact_impulse * total_contact_impulse.log()).sum();
+            // }
 
-            if (GRF_impulse.sum() < 1e-4) {
-                /// almost no contact between foot and ground
-                GRF_impulse_reward = 0.0;
-            }
-            else {
-                GRF_impulse_reward = 1 / (GRF_impulse.sum() / 4);
-            }
+            // if (GRF_impulse.sum() < 1e-4) {
+            //     /// almost no contact between foot and ground
+            //     GRF_impulse_reward = 0.0;
+            // }
+            // else {
+            //     GRF_impulse_reward = 1 / (GRF_impulse.sum() / 4);
+            // }
 
             // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
             // std::cout << "Entropy" << total_contact_impulse.format(CommaInitFmt) << std::endl;
@@ -273,12 +307,12 @@ namespace raisim
         bool visualizable_ = false;
         raisim::ArticulatedSystem *anymal_;
         Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_, pTarget12_, vTarget_, torque;
-        double terminalRewardCoeff_ = -10., velocity, desired_velocity, reward_torque_coeff;
-        double reward_velocity_coeff, reward_GRF_coeff, reward_impulse_coeff, GRF_entropy, GRF_impulse_reward;
+        double terminalRewardCoeff_ = -10., velocity, desired_velocity, reward_torque_coeff, pitch_and_yaw, leg_work_entropy;
+        double reward_velocity_coeff, reward_GRF_coeff, reward_impulse_coeff, reward_height_coeff, reward_orientation_coeff, GRF_entropy, GRF_impulse_reward, reward_leg_work_coeff;
         Eigen::VectorXd actionMean_, actionStd_, obDouble_, reward_log;
         Eigen::VectorXd single_contact_impulse;
         Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
-        Eigen::ArrayXd total_contact_impulse, GRF_impulse;
+        Eigen::ArrayXd total_contact_impulse, GRF_impulse, joint_work, leg_work;
         std::set<size_t> footIndices_, contact_foot_idx;
     };
 }

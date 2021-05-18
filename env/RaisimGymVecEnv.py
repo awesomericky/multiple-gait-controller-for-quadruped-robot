@@ -26,6 +26,7 @@ class RaisimGymVecEnv:
         self._done = np.zeros(self.num_envs, dtype=np.bool)
         self.rewards = [[] for _ in range(self.num_envs)]
         self.reward_log = np.zeros([self.num_envs, cfg["n_reward"]], dtype=np.float32)
+        self.contact_log = np.zeros([self.num_envs, 4], dtype=np.float32)
 
         # logging
         self.update_count = 0
@@ -105,6 +106,10 @@ class RaisimGymVecEnv:
     
     def reward_logging(self):
         self.wrapper.reward_logging(self.reward_log)
+    
+    def contact_logging(self):
+        import pdb; pdb.set_trace()
+        self.wrapper.contact_logging(self.contact_log)
 
     @property
     def num_envs(self):

@@ -15,11 +15,17 @@ environment:
     forwardVel_difference:
       coeff: 0.3
     torque:
-      coeff: -12e-5
-    GRF_entropy:
-      coeff: 0.0
-    impulse:
-      coeff: 0.0
+      coeff: -4e-5
+    height:
+      coeff: 0.3 #0.3
+    orientation:
+      coeff: 0.3 #0.3
+    leg_work_entropy:
+      coeff: 0.1
+    # GRF_entropy:
+      # coeff: 0.0
+    # impulse:
+      # coeff: 0.0
   velocity: 1
 
 architecture:

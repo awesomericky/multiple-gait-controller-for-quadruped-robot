@@ -86,6 +86,12 @@ class VectorizedEnvironment {
       environments_[i]->reward_logging(rewards.row(i));
   }
 
+  void contact_logging(Eigen::Ref<EigenRowMajorMat> &contacts) {
+#pragma omp parallel for
+    for (int i = 0; i < num_envs_; i++)
+      environments_[i]->contact_logging(contacts.row(i));
+  }
+
   void turnOnVisualization() { if(render_) environments_[0]->turnOnVisualization(); }
   void turnOffVisualization() { if(render_) environments_[0]->turnOffVisualization(); }
   void startRecordingVideo(const std::string& videoName) { if(render_) environments_[0]->startRecordingVideo(videoName); }
