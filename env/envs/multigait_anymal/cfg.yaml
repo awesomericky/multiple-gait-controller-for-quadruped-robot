@@ -10,7 +10,7 @@ environment:
   simulation_dt: 0.0025
   control_dt: 0.01
   max_time: 4.0
-  n_reward: 4
+  n_reward: 6
   reward:
     forwardVel_difference:
       coeff: 0.3
@@ -21,6 +21,8 @@ environment:
     orientation:
       coeff: 0.3 #0.3
     leg_work_entropy:
+      coeff: 0.3
+    uncontact_penalty:
       coeff: 0.1
     # GRF_entropy:
       # coeff: 0.0

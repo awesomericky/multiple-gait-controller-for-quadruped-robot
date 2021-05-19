@@ -10,6 +10,14 @@
 #include <set>
 #include "../../RaisimGymEnv.hpp"
 
+// To make new function
+// 1. Environment.hpp
+// 2. raisim_gym.cpp
+// 3. RaisimGymEnv.hpp
+// 4. VectorizedEnvironment.hpp
+// 5. RaisimGymVecEnv.py (if needed)
+
+
 namespace raisim
 {
 
@@ -154,20 +162,37 @@ namespace raisim
             updateObservation();
 
             torque = anymal_->getGeneralizedForce().e(); // squaredNorm
+
+            // // Test
+            // joint_work = (gv_.tail(8) * torque.tail(8)).array() * control_dt_;
+            // leg_work << joint_work[0] + joint_work[1], joint_work[2] + joint_work[3], joint_work[4] + joint_work[5], joint_work[6] + joint_work[7];
+            // leg_work = leg_work.abs();
+            // leg_work /= leg_work.sum();
+            // leg_work += 1e-6;
+            // leg_work_entropy = -(leg_work * leg_work.log()).sum();
+            
             // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
-            // std::cout << "torque" << torque.format(CommaInitFmt) << std::endl;
-            joint_work = (gv_ * torque.tail(8)).array().abs() * control_dt_;
+            // std::cout << "Leg entropy (test)"<< leg_work_entropy << std::endl;
+            // std::cout << "Joint work (test)" << joint_work.format(CommaInitFmt) << std::endl;
+            // std::cout << "Leg work (test)" << leg_work.format(CommaInitFmt) << std::endl;
+
+            // Real
+            joint_work = (gv_.tail(8) * torque.tail(8)).array().abs() * control_dt_;
             leg_work << joint_work[0] + joint_work[1], joint_work[2] + joint_work[3], joint_work[4] + joint_work[5], joint_work[6] + joint_work[7];
             leg_work /= leg_work.sum();
             leg_work += 1e-6;
             leg_work_entropy = -(leg_work * leg_work.log()).sum();
-            // std::cout << leg_work_entropy << std::endl;
 
-            rewards_.record("torque", joint_work.sum() * control_dt_);
+            // std::cout << "Leg entropy "<< leg_work_entropy << std::endl;
+            // std::cout << "Joint work" << joint_work.format(CommaInitFmt) << std::endl;
+            // std::cout << "Leg work" << leg_work.format(CommaInitFmt) << std::endl;
+
+            rewards_.record("torque", joint_work.sum());
             rewards_.record("forwardVel_difference", std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)));
             rewards_.record("height", std::exp(-std::abs(gc_[2] - gc_init_[2])));
             rewards_.record("orientation", std::exp(-std::abs(pitch_and_yaw - 1)));
             rewards_.record("leg_work_entropy", leg_work_entropy);
+            rewards_.record("uncontact_penalty", unContactPenalty);
             // std::cout << pitch_and_yaw << std::endl;
             // rewards_.record("GRF_entropy", GRF_entropy);
             // rewards_.record("impulse", GRF_impulse_reward);
@@ -177,14 +202,15 @@ namespace raisim
 
         void reward_logging(Eigen::Ref<EigenVec> rewards) final
         {
-            reward_log.setZero(4);
-            reward_log[0] = (gv_ * torque.tail(8)).array().abs().sum() * control_dt_ * reward_torque_coeff;
+            reward_log.setZero(6);  ///////// Need to change!! Don't forget!! /////////////
+            reward_log[0] = joint_work.sum() * reward_torque_coeff;
             reward_log[1] = std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)) * reward_velocity_coeff;
             reward_log[2] = std::exp(-std::abs(gc_[2] - gc_init_[2])) * reward_height_coeff;
             reward_log[3] = std::exp(-std::abs(pitch_and_yaw - 1)) * reward_orientation_coeff;
             reward_log[4] = leg_work_entropy * reward_leg_work_coeff;
-            // reward_log[5] = GRF_entropy * reward_GRF_coeff;
-            // reward_log[6] = GRF_impulse_reward * reward_impulse_coeff;
+            reward_log[5] = unContactPenalty;
+            // reward_log[6] = GRF_entropy * reward_GRF_coeff;
+            // reward_log[7] = GRF_impulse_reward * reward_impulse_coeff;
 
             rewards = reward_log.cast<float>();
         }
@@ -232,6 +258,8 @@ namespace raisim
             // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
             // std::cout << "Joint" << gc_.tail(8).format(CommaInitFmt) << std::endl;
 
+            unContactPenalty = -5.;
+
             // check all contacts
             for (auto &contact : anymal_->getContacts())
             {
@@ -248,6 +276,7 @@ namespace raisim
                     idx = int(int(contact.getlocalBodyIndex()) / 2) - 1;
                     // total_contact_impulse[idx] = std::max(double(single_contact_impulse[2]), 0.0);
                     GRF_impulse[idx] = single_contact_impulse.squaredNorm() * control_dt_;
+                    unContactPenalty = 0.;
                 }
             }
 
@@ -309,6 +338,7 @@ namespace raisim
         Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_, pTarget12_, vTarget_, torque;
         double terminalRewardCoeff_ = -10., velocity, desired_velocity, reward_torque_coeff, pitch_and_yaw, leg_work_entropy;
         double reward_velocity_coeff, reward_GRF_coeff, reward_impulse_coeff, reward_height_coeff, reward_orientation_coeff, GRF_entropy, GRF_impulse_reward, reward_leg_work_coeff;
+        double unContactPenalty = -5.;
         Eigen::VectorXd actionMean_, actionStd_, obDouble_, reward_log;
         Eigen::VectorXd single_contact_impulse;
         Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;

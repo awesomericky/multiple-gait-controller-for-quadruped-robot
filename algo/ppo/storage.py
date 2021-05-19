@@ -25,6 +25,9 @@ class RolloutStorage:
 
         self.step = 0
 
+        self.reward_normalize_type = 1
+        assert self.reward_normalize_type in [0, 1, 2, 3], f"Unavailable reward normalize method {self.reward_normalize_type}"
+
     def add_transitions(self, actor_obs, critic_obs, actions, rewards, dones, values, actions_log_prob):
         """
         Function saving (s, a, r(s, a), v(s)) pairs
@@ -64,8 +67,20 @@ class RolloutStorage:
         self.rewards += not_dones * each_step_auxiliary_loss.unsqueeze(0)
 
     def reward_normalize(self):
-        self.rewards -= torch.mean(self.rewards)
-        self.rewards /= torch.std(self.rewards)
+        if self.reward_normalize_type == 0:
+            pass
+        elif self.reward_normalize_type == 1:
+            # normalize 1 (normalize total)
+            self.rewards -= torch.mean(self.rewards)
+            self.rewards /= torch.std(self.rewards)
+        elif self.reward_normalize_type == 2:
+            # normalize 2 (normalize for each env data) ==> layer normalization
+            self.rewards -= torch.mean(self.rewards, axis=0).unsqueeze(0)
+            self.rewards /= torch.std(self.rewards, axis=0).unsqueeze(0)
+        elif self.reward_normalize_type == 3:
+            # normalize 3 (normalize for each step) ==> batch normalization
+            self.rewards -= torch.mean(self.rewards, axis=1).unsqueeze(1)
+            self.rewards /= torch.std(self.rewards, axis=1).unsqueeze(1)
 
     def compute_returns(self, last_values, gamma, lam):
         self.reward_normalize()  # normalize reward

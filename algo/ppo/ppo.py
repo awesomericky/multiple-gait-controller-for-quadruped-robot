@@ -122,6 +122,8 @@ class PPO:
                 # self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
                 self.writer.add_scalar('Reward/height/mean', np.mean(log_value[:, 2]), step)
                 self.writer.add_scalar('Reward/orientation/mean', np.mean(log_value[:, 3]), step)
+                self.writer.add_scalar('Reward/LegWorkEntropy/mean', np.mean(log_value[:, 4]), step)
+                self.writer.add_scalar('Reward/uncontactPenalty/mean', np.mean(log_value[:, 5]), step)
                 # self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 4]), step)
                 # self.writer.add_scalar('Reward/GRF_entropy/std', np.std(log_value[:, 2]), step)
                 # self.writer.add_scalar('Reward/impulse/mean', np.mean(log_value[:, 5]), step)

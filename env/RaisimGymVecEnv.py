@@ -108,7 +108,6 @@ class RaisimGymVecEnv:
         self.wrapper.reward_logging(self.reward_log)
     
     def contact_logging(self):
-        import pdb; pdb.set_trace()
         self.wrapper.contact_logging(self.contact_log)
 
     @property

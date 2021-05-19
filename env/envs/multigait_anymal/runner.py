@@ -19,10 +19,10 @@ import pdb
 """
 # TODO
 
-1. Check contact map ==> check real phase
-2. Record video
-# 3. Add friction work + contact pattern reward ==> leg work entropy
-4. Think way for hierarchical RL w/ reward
+1. Check result for pace, bound (experiment with excel row 52, 58)
+2. Think way for hierarchical RL w/ reward
+
+Don't expect the gait you want!!
 
 """
 
@@ -165,8 +165,8 @@ period = 0.7  # [s]
 period_param = 2 * np.pi / period  # period:
 FR_target = np.pi
 FL_target = 0
-RR_target = np.pi
-RL_target = 0
+RR_target = 0
+RL_target = np.pi
 target_signal[0] = sin(t_range, 1, period_param, FR_target, 0.0)
 target_signal[1] = sin(t_range, 1, period_param, FL_target, 0.0)
 target_signal[2] = sin(t_range, 1, period_param, RR_target, 0.0)
@@ -203,6 +203,7 @@ for update in range(1000000):
             obs = env.observe(False)
             # obs_and_target = np.concatenate((obs, target_signal), axis=1, dtype=np.float32)
             action_ll = loaded_graph.architecture(torch.from_numpy(obs))
+            action_ll[:, 0] = torch.relu(action_ll[:, 0])
             action_ll = action_ll.cpu().detach().numpy()
             env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * target_signal[:, step] + action_ll[:, 1][:, np.newaxis]
             env_action[:, [1, 3, 5, 7]] = action_ll[:, 2:]
@@ -218,10 +219,21 @@ for update in range(1000000):
         
         # save & plot contact log
         np.savez_compressed(f'contact_plot/contact_{update}.npz', contact=contact_log)
-        fig = plt.figure(figsize=(20,10))
-        plt.imshow(contact_log, cmap='Greys')
-        plt.colorbar()
-        plt.title("contact", fontsize=25)
+
+        start = 400
+        total_step = 200
+        single_step = 50
+        fig, ax = plt.subplots(1,1, figsize=(20,10))
+        img = ax.imshow(contact_log[:, start:start + total_step], aspect='auto')
+        x_label_list = [i*0.01 for i in range(start + single_step, start + total_step + 1, single_step)]
+        y_label_list = ['FR', 'FL', 'RR', 'RL']
+        ax.set_xticks([i for i in range(single_step, total_step + 1, single_step)])
+        ax.set_yticks([0, 1, 2, 3])
+        ax.set_xticklabels(x_label_list)
+        ax.set_yticklabels(y_label_list)
+        fig.colorbar(img)
+        ax.set_title("contact", fontsize=20)
+        ax.set_xlabel('time [s]')
         plt.savefig(f'contact_plot/contact_{update}.png')
         plt.close()
 
