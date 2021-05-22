@@ -21,8 +21,7 @@ import pdb
 
 1. Check result for pace, bound (experiment with excel row 52, 58)
 2. Think way for hierarchical RL w/ reward
-
-Don't expect the gait you want!!
+(3. Test w/ small std?)
 
 """
 
@@ -80,7 +79,7 @@ ob_dim = env.num_obs  # 26 (w/ HAA joints fixed)
 # act_dim = env.num_acts - 4
 # act_dim = env.num_acts + 4
 act_dim = env.num_acts - 2
-target_signal_dim = 0
+CPG_signal_dim = 0
 
 # Training
 n_steps = math.floor(cfg['environment']['max_time'] /
@@ -89,7 +88,7 @@ total_steps = n_steps * env.num_envs
 
 avg_rewards = []
 
-actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + target_signal_dim, act_dim),
+actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim, act_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
                              act_dim, 1.0),  # 1.0
                          device)
@@ -160,17 +159,17 @@ DESIRED_VELOCITY = cfg['environment']['velocity']  # m/s
 """
 
 t_range = np.arange(n_steps*2) * cfg['environment']['control_dt']
-target_signal = np.zeros((4, n_steps*2))
+CPG_signal = np.zeros((4, n_steps*2))
 period = 0.7  # [s]
 period_param = 2 * np.pi / period  # period:
 FR_target = np.pi
 FL_target = 0
 RR_target = 0
 RL_target = np.pi
-target_signal[0] = sin(t_range, 1, period_param, FR_target, 0.0)
-target_signal[1] = sin(t_range, 1, period_param, FL_target, 0.0)
-target_signal[2] = sin(t_range, 1, period_param, RR_target, 0.0)
-target_signal[3] = sin(t_range, 1, period_param, RL_target, 0.0)
+CPG_signal[0] = sin(t_range, 1, period_param, FR_target, 0.0)
+CPG_signal[1] = sin(t_range, 1, period_param, FL_target, 0.0)
+CPG_signal[2] = sin(t_range, 1, period_param, RR_target, 0.0)
+CPG_signal[3] = sin(t_range, 1, period_param, RL_target, 0.0)
 
 env_action = np.zeros((cfg['environment']['num_envs'], 8), dtype=np.float32)
 
@@ -181,6 +180,7 @@ for update in range(1000000):
     done_sum = 0
     average_dones = 0.
 
+    
     if update % cfg['environment']['eval_every_n'] == 0:
         print("Visualizing and evaluating the current policy")
         torch.save({
@@ -190,7 +190,7 @@ for update in range(1000000):
             'optimizer_state_dict': ppo.optimizer.state_dict(),
         }, saver.data_dir+"/full_"+str(update)+'.pt')
         # we create another graph just to demonstrate the save/load method
-        loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + target_signal_dim, act_dim)
+        loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim, act_dim)
         loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['actor_architecture_state_dict'])
 
         env.turn_on_visualization()
@@ -201,11 +201,11 @@ for update in range(1000000):
         for step in range(n_steps*2):
             frame_start = time.time()
             obs = env.observe(False)
-            # obs_and_target = np.concatenate((obs, target_signal), axis=1, dtype=np.float32)
+            # obs_and_target = np.concatenate((obs, CPG_signal), axis=1, dtype=np.float32)
             action_ll = loaded_graph.architecture(torch.from_numpy(obs))
             action_ll[:, 0] = torch.relu(action_ll[:, 0])
             action_ll = action_ll.cpu().detach().numpy()
-            env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * target_signal[:, step] + action_ll[:, 1][:, np.newaxis]
+            env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * CPG_signal[:, step] + action_ll[:, 1][:, np.newaxis]
             env_action[:, [1, 3, 5, 7]] = action_ll[:, 2:]
             reward_ll, dones = env.step(env_action)
             frame_end = time.time()
@@ -257,7 +257,7 @@ for update in range(1000000):
     # actual training
     for step in range(n_steps):
         obs, non_obs = env.observe_logging()
-        # obs_and_target = np.concatenate((obs, target_signal), axis=1, dtype=np.float32)
+        # obs_and_target = np.concatenate((obs, CPG_signal), axis=1, dtype=np.float32)
         action = ppo.observe(obs)
         # amplitude_history[step] = action[0, 0]
         # shaft_history[step] = action[0, 4]
@@ -271,23 +271,23 @@ for update in range(1000000):
             RL_thigh_joint_history[step] = non_obs[0, 10]
             RL_calf_joint_history[step] = non_obs[0,11]
 
-        # action[:, [8, 10, 12, 14]] = action[:, :4] * target_signal[:, step] + action[:, 4:8] + action[:, [8, 10, 12, 14]]
-        # action[:, [0, 2, 4, 6]] = np.tile(A[:, np.newaxis], (1, 4)) * target_signal[:, step] + action[:, [0, 2, 4, 6]]
+        # action[:, [8, 10, 12, 14]] = action[:, :4] * CPG_signal[:, step] + action[:, 4:8] + action[:, [8, 10, 12, 14]]
+        # action[:, [0, 2, 4, 6]] = np.tile(A[:, np.newaxis], (1, 4)) * CPG_signal[:, step] + action[:, [0, 2, 4, 6]]
 
         # # Architecture 1
-        # env_action[:, [0, 2, 4, 6]] = target_signal[:, step] + action[:, :4]
+        # env_action[:, [0, 2, 4, 6]] = CPG_signal[:, step] + action[:, :4]
         # env_action[:, [1, 3, 5, 7]] =  action[:, 4:]
 
         # # Architecture 2
-        # env_action[:, [0, 2, 4, 6]] = target_signal[:, step]
+        # env_action[:, [0, 2, 4, 6]] = CPG_signal[:, step]
         # env_action[:, [1, 3, 5, 7]] =  action`
 
         # # Architecture 4
-        # env_action[:, [0, 2, 4, 6]] = action[:, :4] * target_signal[:, step] + action[:, 4:8]
+        # env_action[:, [0, 2, 4, 6]] = action[:, :4] * CPG_signal[:, step] + action[:, 4:8]
         # env_action[:, [1, 3, 5, 7]] = action[:, 8:]
 
         # Architecture 5
-        env_action[:, [0, 2, 4, 6]] = action[:, 0][:, np.newaxis] * target_signal[:, step] + action[:, 1][:, np.newaxis]
+        env_action[:, [0, 2, 4, 6]] = action[:, 0][:, np.newaxis] * CPG_signal[:, step] + action[:, 1][:, np.newaxis]
         env_action[:, [1, 3, 5, 7]] = action[:, 2:]
 
         reward, dones = env.step(env_action)
@@ -314,25 +314,25 @@ for update in range(1000000):
 
         # FR_thigh
         ax[0, 0].plot(t_range[:n_steps], FR_thigh_joint_history, 'o', label='joint angle [rad]')
-        ax[0, 0].plot(t_range[:n_steps], target_signal[0, :n_steps], label='signal')
+        ax[0, 0].plot(t_range[:n_steps], CPG_signal[0, :n_steps], label='signal')
         ax[0, 0].set_xlabel('time [s]', fontsize=20)
         ax[0, 0].set_title('FR', fontsize=25)
 
         # FL_thigh
         ax[0, 1].plot(t_range[:n_steps], FL_thigh_joint_history, 'o', label='joint angle [rad]')
-        ax[0, 1].plot(t_range[:n_steps], target_signal[1, :n_steps], label='signal')
+        ax[0, 1].plot(t_range[:n_steps], CPG_signal[1, :n_steps], label='signal')
         ax[0, 1].set_xlabel('time [s]', fontsize=20)
         ax[0, 1].set_title('FL', fontsize=25)
 
         # RR_thigh
         ax[1, 0].plot(t_range[:n_steps], RR_thigh_joint_history, 'o', label='joint angle [rad]')
-        ax[1, 0].plot(t_range[:n_steps], target_signal[2, :n_steps], label='signal')
+        ax[1, 0].plot(t_range[:n_steps], CPG_signal[2, :n_steps], label='signal')
         ax[1, 0].set_xlabel('time [s]', fontsize=20)
         ax[1, 0].set_title('RR', fontsize=25)
 
         # RL_thigh
         ax[1, 1].plot(t_range[:n_steps], RL_thigh_joint_history, 'o', label='joint angle [rad]')
-        ax[1, 1].plot(t_range[:n_steps], target_signal[3, :n_steps], label='signal')
+        ax[1, 1].plot(t_range[:n_steps], CPG_signal[3, :n_steps], label='signal')
         ax[1, 1].set_xlabel('time [s]', fontsize=20)
         ax[1, 1].set_title('RL', fontsize=25)
 
@@ -369,7 +369,7 @@ for update in range(1000000):
 
     # take st step to get value obs
     obs, _ = env.observe_logging()
-    # obs_and_target = np.concatenate((obs, target_signal), axis=1, dtype=np.float32)
+    # obs_and_target = np.concatenate((obs, CPG_signal), axis=1, dtype=np.float32)
     # ppo.update(actor_obs=obs_and_target, value_obs=obs, log_this_iteration=update % 10 == 0, update=update, auxilory_value=sin_fitting_loss[:, np.newaxis])
     ppo.update(actor_obs=obs, value_obs=obs,
                log_this_iteration=update % 10 == 0, update=update)

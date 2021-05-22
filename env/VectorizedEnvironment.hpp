@@ -92,6 +92,18 @@ class VectorizedEnvironment {
       environments_[i]->contact_logging(contacts.row(i));
   }
 
+  void set_target_velocity(Eigen::Ref<EigenRowMajorMat> &velocity) {
+#pragma omp parallel for
+    for (int i = 0; i < num_envs_; i++)
+      environments_[i]->set_target_velocity(velocity.row(i));
+  }
+
+  void get_CPG_reward(Eigen::Ref<EigenRowMajorMat> &CPG_reward) {
+#pragma omp parallel for
+    for (int i = 0; i < num_envs_; i++)
+      environments_[i]->get_CPG_reward(CPG_reward.row(i));
+  }
+
   void turnOnVisualization() { if(render_) environments_[0]->turnOnVisualization(); }
   void turnOffVisualization() { if(render_) environments_[0]->turnOffVisualization(); }
   void startRecordingVideo(const std::string& videoName) { if(render_) environments_[0]->startRecordingVideo(videoName); }

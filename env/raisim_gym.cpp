@@ -39,6 +39,8 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def("curriculumUpdate", &VectorizedEnvironment<ENVIRONMENT>::curriculumUpdate)
     .def("reward_logging", &VectorizedEnvironment<ENVIRONMENT>::reward_logging)
     .def("contact_logging", &VectorizedEnvironment<ENVIRONMENT>::contact_logging)
+    .def("set_target_velocity", &VectorizedEnvironment<ENVIRONMENT>::set_target_velocity)
+    .def("get_CPG_reward", &VectorizedEnvironment<ENVIRONMENT>::get_CPG_reward)
     .def(py::pickle(
         [](const VectorizedEnvironment<ENVIRONMENT> &p) { // __getstate__ --> Pickling to Python
             /* Return a tuple that fully encodes the state of the object */

@@ -20,6 +20,7 @@ class PPO:
                  num_transitions_per_env,
                  num_learning_epochs,
                  num_mini_batches,
+                 PPO_type,
                  clip_param=0.2,
                  gamma=0.998,
                  lam=0.95,
@@ -74,9 +75,13 @@ class PPO:
         self.actions_log_prob = None
         self.actor_obs = None
 
+        assert PPO_type in ['CPG', 'local'], 'Unavailable PPO type'
+        self.PPO_type = PPO_type
+
+
     def observe(self, actor_obs):
         self.actor_obs = actor_obs
-        self.actions, self.actions_log_prob = self.actor.sample(torch.from_numpy(actor_obs).to(self.device))
+        self.actions, self.actions_log_prob = self.actor.sample(torch.from_numpy(actor_obs).to(self.device), self.PPO_type)
         # self.actions = np.clip(self.actions.numpy(), self.env.action_space.low, self.env.action_space.high)
         return self.actions.cpu().numpy()
 
@@ -122,8 +127,8 @@ class PPO:
                 # self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
                 self.writer.add_scalar('Reward/height/mean', np.mean(log_value[:, 2]), step)
                 self.writer.add_scalar('Reward/orientation/mean', np.mean(log_value[:, 3]), step)
-                self.writer.add_scalar('Reward/LegWorkEntropy/mean', np.mean(log_value[:, 4]), step)
-                self.writer.add_scalar('Reward/uncontactPenalty/mean', np.mean(log_value[:, 5]), step)
+                # self.writer.add_scalar('Reward/LegWorkEntropy/mean', np.mean(log_value[:, 4]), step)
+                # self.writer.add_scalar('Reward/uncontactPenalty/mean', np.mean(log_value[:, 5]), step)
                 # self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 4]), step)
                 # self.writer.add_scalar('Reward/GRF_entropy/std', np.std(log_value[:, 2]), step)
                 # self.writer.add_scalar('Reward/impulse/mean', np.mean(log_value[:, 5]), step)
@@ -195,7 +200,7 @@ class PPO:
             for actor_obs_batch, critic_obs_batch, actions_batch, target_values_batch, advantages_batch, returns_batch, old_actions_log_prob_batch \
                     in self.batch_sampler(self.num_mini_batches):
 
-                actions_log_prob_batch, entropy_batch = self.actor.evaluate(actor_obs_batch, actions_batch)
+                actions_log_prob_batch, entropy_batch = self.actor.evaluate(actor_obs_batch, actions_batch, self.PPO_type)
                 value_batch = self.critic.evaluate(critic_obs_batch)
 
                 # Surrogate loss

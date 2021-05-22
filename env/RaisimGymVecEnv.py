@@ -23,6 +23,7 @@ class RaisimGymVecEnv:
         self._observation = np.zeros([self.num_envs, self.num_obs], dtype=np.float32)
         self.obs_rms = RunningMeanStd(shape=[self.num_envs, self.num_obs])
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
+        self._CPG_reward = np.zeros(self.num_envs, dtype=np.float32)
         self._done = np.zeros(self.num_envs, dtype=np.bool)
         self.rewards = [[] for _ in range(self.num_envs)]
         self.reward_log = np.zeros([self.num_envs, cfg["n_reward"]], dtype=np.float32)
@@ -50,7 +51,7 @@ class RaisimGymVecEnv:
     def step(self, action):
         self.wrapper.step(action, self._reward, self._done)
         return self._reward.copy(), self._done.copy()
-
+    
     def load_scaling(self, dir_name, iteration, count=1e5):
         mean_file_name = dir_name + "/mean" + str(iteration) + ".csv"
         var_file_name = dir_name + "/var" + str(iteration) + ".csv"
@@ -109,6 +110,12 @@ class RaisimGymVecEnv:
     
     def contact_logging(self):
         self.wrapper.contact_logging(self.contact_log)
+    
+    def set_target_velocity(self, target_velocity):
+        self.wrapper.set_target_velocity(target_velocity)
+
+    def get_CPG_reward(self):
+        self.wrapper.get_CPG_reward(self._CPG_reward)
 
     @property
     def num_envs(self):

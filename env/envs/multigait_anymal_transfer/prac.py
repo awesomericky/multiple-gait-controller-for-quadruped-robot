@@ -17,9 +17,8 @@ import matplotlib.pyplot as plt
 # print(end - start)
 
 update = "test"
-# update = "300"
-start = 550
-total_step = 150
+start = 400
+total_step = 100
 single_step = 50
 
 contact_log = np.load(f'contact_plot/contact_{update}.npz')['contact']

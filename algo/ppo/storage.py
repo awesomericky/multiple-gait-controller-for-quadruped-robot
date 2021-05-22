@@ -41,7 +41,7 @@ class RolloutStorage:
             - values : (n_env, 1)
             - actions_log_prob : (n_env)
         
-        cf) 34 = obs_dim + target_signal_dim
+        cf) 34 = obs_dim + CPG_signal_dim
             26 = obs_dim
             8 = action_dim (= n_joint)
         """

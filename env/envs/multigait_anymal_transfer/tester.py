@@ -68,7 +68,7 @@ else:
     env.turn_on_visualization()
 
     # max_steps = 1000000
-    max_steps = 1500 ## 10 secs
+    max_steps = 3000 ## 10 secs
 
     t_range = np.arange(max_steps) * cfg['environment']['control_dt']
     CPG_signal = np.zeros((4, max_steps))
