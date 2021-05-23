@@ -20,7 +20,7 @@ class PPO:
                  num_transitions_per_env,
                  num_learning_epochs,
                  num_mini_batches,
-                 PPO_type,
+                 PPO_type=None,
                  clip_param=0.2,
                  gamma=0.998,
                  lam=0.95,
@@ -33,6 +33,9 @@ class PPO:
                  device='cpu',
                  shuffle_batch=True,
                  logger='tb'):
+        
+        assert PPO_type in ['CPG', 'local', None], 'Unavailable PPO type'
+        self.PPO_type = PPO_type
 
         # PPO components
         self.actor = actor
@@ -64,8 +67,16 @@ class PPO:
 
         # Log
         if logger == 'tb':
-            self.log_dir = os.path.join(log_dir, datetime.now().strftime('%b%d_%H-%M-%S'))
-            self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+            if PPO_type == 'CPG':
+                self.log_dir = os.path.join(log_dir, datetime.now().strftime('%b%d_%H-%M-%S') + '_CPG')
+                self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+            elif PPO_type == 'local':
+                self.log_dir = os.path.join(log_dir, datetime.now().strftime('%b%d_%H-%M-%S') + '_Local')
+                self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+            else:
+                self.log_dir = os.path.join(log_dir, datetime.now().strftime('%b%d_%H-%M-%S'))
+                self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+
             self.tot_timesteps = 0
             self.tot_time = 0
             self.logger = logger
@@ -74,10 +85,6 @@ class PPO:
         self.actions = None
         self.actions_log_prob = None
         self.actor_obs = None
-
-        assert PPO_type in ['CPG', 'local'], 'Unavailable PPO type'
-        self.PPO_type = PPO_type
-
 
     def observe(self, actor_obs):
         self.actor_obs = actor_obs
@@ -109,9 +116,18 @@ class PPO:
         mean_std = self.actor.distribution.std.mean()
 
         if self.logger == 'tb':
-            self.writer.add_scalar('Loss/value_function', variables['mean_value_loss'], variables['it'])
-            self.writer.add_scalar('Loss/surrogate', variables['mean_surrogate_loss'], variables['it'])
-            self.writer.add_scalar('Policy/mean_noise_std', mean_std.item(), variables['it'])
+            if self.PPO_type == 'CPG':
+                self.writer.add_scalar('CPG/Loss/value_function', variables['mean_value_loss'], variables['it'])
+                self.writer.add_scalar('CPG/Loss/surrogate', variables['mean_surrogate_loss'], variables['it'])
+                self.writer.add_scalar('CPG/Policy/mean_noise_std', mean_std.item(), variables['it'])
+            elif self.PPO_type == 'local':
+                self.writer.add_scalar('Local/Loss/value_function', variables['mean_value_loss'], variables['it'])
+                self.writer.add_scalar('Local/Loss/surrogate', variables['mean_surrogate_loss'], variables['it'])
+                self.writer.add_scalar('Local/Policy/mean_noise_std', mean_std.item(), variables['it'])
+            else:
+                self.writer.add_scalar('Loss/value_function', variables['mean_value_loss'], variables['it'])
+                self.writer.add_scalar('Loss/surrogate', variables['mean_surrogate_loss'], variables['it'])
+                self.writer.add_scalar('Policy/mean_noise_std', mean_std.item(), variables['it'])
 
         elif self.logger == 'wandb':
             wandb.log({'Loss/value_function': variables['mean_value_loss'], \
@@ -120,26 +136,58 @@ class PPO:
 
     def extra_log(self, log_value, step, type=None):
         if self.logger == 'tb':
-            if type == 'reward':
-                self.writer.add_scalar('Reward/torque/mean', np.mean(log_value[:, 0]), step)
-                # self.writer.add_scalar('Reward/torque/std', np.std(log_value[:, 0]), step)
-                self.writer.add_scalar('Reward/velocity/mean', np.mean(log_value[:, 1]), step)
-                # self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
-                self.writer.add_scalar('Reward/height/mean', np.mean(log_value[:, 2]), step)
-                self.writer.add_scalar('Reward/orientation/mean', np.mean(log_value[:, 3]), step)
-                # self.writer.add_scalar('Reward/LegWorkEntropy/mean', np.mean(log_value[:, 4]), step)
-                # self.writer.add_scalar('Reward/uncontactPenalty/mean', np.mean(log_value[:, 5]), step)
-                # self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 4]), step)
-                # self.writer.add_scalar('Reward/GRF_entropy/std', np.std(log_value[:, 2]), step)
-                # self.writer.add_scalar('Reward/impulse/mean', np.mean(log_value[:, 5]), step)
-            elif type == 'action':
-                # Architecture 5
-                self.writer.add_scalar('CPG_tranform/Thigh_amplitude/mean', np.mean(log_value[:, 0]), step)
-                self.writer.add_scalar('CPG_tranform/Thigh_shaft/mean', np.mean(log_value[:, 1]), step)
-                self.writer.add_scalar('CPG_tranform/FR_calf/mean', np.mean(log_value[:, 2]), step)
-                self.writer.add_scalar('CPG_tranform/FL_calf/mean', np.mean(log_value[:, 3]), step)
-                self.writer.add_scalar('CPG_tranform/RR_calf/mean', np.mean(log_value[:, 4]), step)
-                self.writer.add_scalar('CPG_tranform/RL_calf/mean', np.mean(log_value[:, 5]), step)
+            if self.PPO_type == 'CPG':
+                if type == 'reward':
+                    self.writer.add_scalar('CPG/Reward/mean', np.mean(log_value), step)
+                elif type == 'action':
+                    self.writer.add_scalar('CPG/period/mean', np.mean(log_value[:, 0]), step)
+                    self.writer.add_scalar('CPG/FR_phase/mean', np.mean(log_value[:, 1]), step)
+                    self.writer.add_scalar('CPG/FL_phase/mean', np.mean(log_value[:, 2]), step)
+                    self.writer.add_scalar('CPG/RR_phase/mean', np.mean(log_value[:, 3]), step)
+                    self.writer.add_scalar('CPG/RL_phase/mean', np.mean(log_value[:, 4]), step)
+            elif self.PPO_type == 'local':
+                if type == 'reward':
+                    self.writer.add_scalar('Local/Reward/torque/mean', np.mean(log_value[:, 0]), step)
+                    # self.writer.add_scalar('Reward/torque/std', np.std(log_value[:, 0]), step)
+                    self.writer.add_scalar('Local/Reward/velocity/mean', np.mean(log_value[:, 1]), step)
+                    # self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
+                    self.writer.add_scalar('Local/Reward/height/mean', np.mean(log_value[:, 2]), step)
+                    self.writer.add_scalar('Local/Reward/orientation/mean', np.mean(log_value[:, 3]), step)
+                    self.writer.add_scalar('CPG/Reward/GRF_entropy/mean', np.mean(log_value[:, 4]), step)
+                    # self.writer.add_scalar('Reward/LegWorkEntropy/mean', np.mean(log_value[:, 4]), step)
+                    # self.writer.add_scalar('Reward/uncontactPenalty/mean', np.mean(log_value[:, 5]), step)
+                    # self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 4]), step)
+                    # self.writer.add_scalar('Reward/GRF_entropy/std', np.std(log_value[:, 2]), step)
+                    # self.writer.add_scalar('Reward/impulse/mean', np.mean(log_value[:, 5]), step)
+                elif type == 'action':
+                    # Architecture 5
+                    self.writer.add_scalar('Local/CPG_tranform/Thigh_amplitude/mean', np.mean(log_value[:, 0]), step)
+                    self.writer.add_scalar('Local/CPG_tranform/Thigh_shaft/mean', np.mean(log_value[:, 1]), step)
+                    self.writer.add_scalar('Local/CPG_tranform/FR_calf/mean', np.mean(log_value[:, 2]), step)
+                    self.writer.add_scalar('Local/CPG_tranform/FL_calf/mean', np.mean(log_value[:, 3]), step)
+                    self.writer.add_scalar('Local/CPG_tranform/RR_calf/mean', np.mean(log_value[:, 4]), step)
+                    self.writer.add_scalar('Local/CPG_tranform/RL_calf/mean', np.mean(log_value[:, 5]), step)
+            else:
+                if type == 'reward':
+                    self.writer.add_scalar('Reward/torque/mean', np.mean(log_value[:, 0]), step)
+                    # self.writer.add_scalar('Reward/torque/std', np.std(log_value[:, 0]), step)
+                    self.writer.add_scalar('Reward/velocity/mean', np.mean(log_value[:, 1]), step)
+                    # self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
+                    self.writer.add_scalar('Reward/height/mean', np.mean(log_value[:, 2]), step)
+                    self.writer.add_scalar('Reward/orientation/mean', np.mean(log_value[:, 3]), step)
+                    # self.writer.add_scalar('Reward/LegWorkEntropy/mean', np.mean(log_value[:, 4]), step)
+                    # self.writer.add_scalar('Reward/uncontactPenalty/mean', np.mean(log_value[:, 5]), step)
+                    # self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 4]), step)
+                    # self.writer.add_scalar('Reward/GRF_entropy/std', np.std(log_value[:, 2]), step)
+                    # self.writer.add_scalar('Reward/impulse/mean', np.mean(log_value[:, 5]), step)
+                elif type == 'action':
+                    # Architecture 5
+                    self.writer.add_scalar('CPG_tranform/Thigh_amplitude/mean', np.mean(log_value[:, 0]), step)
+                    self.writer.add_scalar('CPG_tranform/Thigh_shaft/mean', np.mean(log_value[:, 1]), step)
+                    self.writer.add_scalar('CPG_tranform/FR_calf/mean', np.mean(log_value[:, 2]), step)
+                    self.writer.add_scalar('CPG_tranform/FL_calf/mean', np.mean(log_value[:, 3]), step)
+                    self.writer.add_scalar('CPG_tranform/RR_calf/mean', np.mean(log_value[:, 4]), step)
+                    self.writer.add_scalar('CPG_tranform/RL_calf/mean', np.mean(log_value[:, 5]), step)
 
 
                 """

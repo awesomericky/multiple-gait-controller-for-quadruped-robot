@@ -81,7 +81,7 @@ avg_rewards = []
 
 CPG_actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, CPG_signal_dim + 1, CPG_signal_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
-                             CPG_signal_dim, 0.3),  # 1.0
+                             CPG_signal_dim, 0.1),  # 1.0
                          device)
 CPG_critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['CPG_value_net'], nn.LeakyReLU, CPG_signal_dim + 1, 1),
                            device)
@@ -185,7 +185,7 @@ for update in range(1000000):
     env.reset()
     average_ll_performance_total = []
     average_dones_total = []
-    
+
     """
     if update % cfg['environment']['eval_every_n'] == 0:
         print("Visualizing and evaluating the current policy")

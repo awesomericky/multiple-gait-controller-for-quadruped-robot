@@ -165,7 +165,7 @@ namespace raisim
 
         void reward_logging(Eigen::Ref<EigenVec> rewards) final
         {
-            reward_log.setZero(6);  ///////// Need to change!! Don't forget!! /////////////
+            reward_log.setZero(5);  ///////// Need to change!! Don't forget!! /////////////
             reward_log[0] = joint_work.sum() * reward_torque_coeff;
             reward_log[1] = std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)) * reward_velocity_coeff;
             reward_log[2] = std::exp(-std::abs(gc_[2] - gc_init_[2])) * reward_height_coeff;
@@ -173,7 +173,7 @@ namespace raisim
             // reward_log[4] = leg_work_entropy * reward_leg_work_coeff;
             // reward_log[5] = unContactPenalty;
             reward_log[4] = GRF_entropy * CPG_reward_GRF_coeff;
-            reward_log[5] = std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)) * CPG_reward_velocity_coeff;
+            // reward_log[5] = std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)) * CPG_reward_velocity_coeff;
             // reward_log[7] = GRF_impulse_reward * reward_impulse_coeff;
 
             rewards = reward_log.cast<float>();

@@ -26,7 +26,7 @@ class Actor:
             # actions[:, 2:] = torch.clamp(actions[:, 2:], min=-1, max=1)
             return actions.cpu().detach(), log_prob.cpu().detach()
 
-        elif PPO_type == 'local':
+        elif PPO_type == 'local' or PPO_type == None:
             logits = self.architecture.architecture(obs)
             # logits[:, :4] = F.relu(logits[:, :4])  # clipping amplitude (Architecture 4)
             logits[:, 0] = torch.relu(logits[:, 0])  # clipping amplitude (Architecture 5)
@@ -44,7 +44,7 @@ class Actor:
         if PPO_type == 'CPG':
             action_mean = torch.sigmoid(self.architecture.architecture(obs))
             return self.distribution.evaluate(obs, action_mean, actions)
-        elif PPO_type == 'local':
+        elif PPO_type == 'local' or PPO_type == None:
             action_mean = self.architecture.architecture(obs)
             # action_mean_clipped = torch.cat((F.relu(action_mean[:, :4]), action_mean[:, 4:]), dim=1)  # clipping amplitude (Architecture 4)
             # action_mean_clipped = torch.cat((torch.relu(action_mean[:, 0]).unsqueeze(-1), torch.tanh(action_mean[:, 1:])), dim=1)  # clipping amplitude & shaft & calf (Architecture 5)
