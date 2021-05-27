@@ -79,11 +79,11 @@ max_vel = cfg['environment']['velocity']['max']
 
 avg_rewards = []
 
-CPG_actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, CPG_signal_dim + 1, CPG_signal_dim),
+CPG_actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, 1, CPG_signal_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
                              CPG_signal_dim, 0.3),  # 1.0
                          device)
-CPG_critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['CPG_value_net'], nn.LeakyReLU, CPG_signal_dim + 1, 1),
+CPG_critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['CPG_value_net'], nn.LeakyReLU, 1, 1),
                            device)
 
 actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + 2, act_dim),
@@ -182,7 +182,6 @@ env_action = np.zeros((cfg['environment']['num_envs'], 8), dtype=np.float32)
 
 for update in range(1000000):
     start = time.time()
-    env.reset()
     average_ll_performance_total = []
     average_dones_total = []
     
@@ -209,16 +208,14 @@ for update in range(1000000):
         env.start_video_recording(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "policy_"+str(update)+'.mp4')
 
         contact_log = np.zeros((4, n_steps*4), dtype=np.float32) # 0: FR, 1: FL, 2: RR, 3:RL
-        previous_CPG = np.zeros((env.num_envs, CPG_signal_dim), dtype=np.float32)
 
         for CPG_step in range(4):
 
             normalized_velocity = np.broadcast_to(np.random.uniform(low = 0, high=1, size=1)[:, np.newaxis], (env.num_envs, 1)).astype(np.float32)
             velocity = normalized_velocity * (max_vel - min_vel) + min_vel
-            CPG_obs = np.concatenate([normalized_velocity, previous_CPG], axis=1)
+            CPG_obs = normalized_velocity
             env.set_target_velocity(velocity)
             current_CPG = CPG_loaded_graph.architecture(torch.from_numpy(CPG_obs)).cpu().detach().numpy()
-            previous_CPG = current_CPG
 
             # generate target signal
             period = current_CPG[:, 0][:, np.newaxis]  # [s]
@@ -258,15 +255,15 @@ for update in range(1000000):
         env.save_scaling(saver.data_dir, str(update))
 
         """
-    previous_CPG = np.zeros((env.num_envs, CPG_signal_dim), dtype=np.float32)
 
     for CPG_step in range(n_CPG_steps):
+        env.reset()
+
         normalized_velocity = np.random.uniform(low = 0, high=1, size=env.num_envs)[:, np.newaxis].astype(np.float32)
         velocity = normalized_velocity * (max_vel - min_vel) + min_vel
-        CPG_obs = np.concatenate([normalized_velocity, previous_CPG], axis=1)
+        CPG_obs = normalized_velocity
         env.set_target_velocity(velocity)
         current_CPG = CPG_ppo.observe(CPG_obs)
-        previous_CPG = current_CPG
 
         if CPG_step % 4 == 0  and 1 < cfg['environment']['num_envs']:
             CPG_ppo.extra_log(current_CPG, update * n_CPG_steps + CPG_step, type='action')
@@ -353,7 +350,7 @@ for update in range(1000000):
         average_dones_total.append(average_dones)
     
     normalized_velocity = np.zeros(env.num_envs)[:, np.newaxis].astype(np.float32)
-    CPG_obs = np.concatenate([normalized_velocity, previous_CPG], axis=1)
+    CPG_obs = normalized_velocity
     CPG_ppo.update(actor_obs=CPG_obs, value_obs=CPG_obs,
                    log_this_iteration=update % 10 == 0, update=update)
     CPG_actor.distribution.enforce_minimum_std((torch.ones(CPG_signal_dim)*0.1).to(device))

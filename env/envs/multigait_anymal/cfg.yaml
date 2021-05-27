@@ -10,7 +10,7 @@ environment:
   simulation_dt: 0.0025
   control_dt: 0.01
   max_time: 4.0
-  n_reward: 6
+  n_reward: 5
   reward:
     forwardVel_difference:
       coeff: 0.3

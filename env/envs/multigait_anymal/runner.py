@@ -79,7 +79,7 @@ ob_dim = env.num_obs  # 26 (w/ HAA joints fixed)
 # act_dim = env.num_acts - 4
 # act_dim = env.num_acts + 4
 act_dim = env.num_acts - 2
-CPG_signal_dim = 0
+CPG_signal_dim = 4
 
 # Training
 n_steps = math.floor(cfg['environment']['max_time'] /
@@ -92,7 +92,7 @@ actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.Le
                          ppo_module.MultivariateGaussianDiagonalCovariance(
                              act_dim, 1.0),  # 1.0
                          device)
-critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim, 1),
+critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim, 1),
                            device)
 
 saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
@@ -159,19 +159,29 @@ DESIRED_VELOCITY = cfg['environment']['velocity']  # m/s
 """
 
 t_range = np.arange(n_steps*2) * cfg['environment']['control_dt']
-CPG_signal = np.zeros((4, n_steps*2))
+# CPG_signal = np.zeros((4, n_steps*2))
 period = 0.7  # [s]
 period_param = 2 * np.pi / period  # period:
-FR_target = np.pi
-FL_target = 0
-RR_target = 0
-RL_target = np.pi
-CPG_signal[0] = sin(t_range, 1, period_param, FR_target, 0.0)
-CPG_signal[1] = sin(t_range, 1, period_param, FL_target, 0.0)
-CPG_signal[2] = sin(t_range, 1, period_param, RR_target, 0.0)
-CPG_signal[3] = sin(t_range, 1, period_param, RL_target, 0.0)
+# FR_target = np.pi
+# FL_target = 0
+# RR_target = 0
+# RL_target = np.pi
+# CPG_signal[0] = sin(t_range, 1, period_param, FR_target, 0.0)
+# CPG_signal[1] = sin(t_range, 1, period_param, FL_target, 0.0)
+# CPG_signal[2] = sin(t_range, 1, period_param, RR_target, 0.0)
+# CPG_signal[3] = sin(t_range, 1, period_param, RL_target, 0.0)
+
+gait_dict = {0: 'pace', 1: 'trot', 2: 'bound'}
+target_signal = {'pace': [np.pi, 0, np.pi, 0], 'trot': [np.pi, 0, 0, np.pi], 'bound': [np.pi, np.pi, 0, 0]}
+target_gait_dict = {'pace': [1, 0, 0], 'trot': [0, 1, 0], 'bound': [0, 0, 1]}
+CPG_signal_dict = {'pace': np.zeros((4, n_steps*2)), 'trot': np.zeros((4, n_steps*2)), 'bound': np.zeros((4, n_steps*2))}
+for k, v in list(target_signal.items()):
+    for i in range(4):
+        CPG_signal_dict[k][i] = sin(t_range, 1, period_param, v[i], 0.0)
 
 env_action = np.zeros((cfg['environment']['num_envs'], 8), dtype=np.float32)
+success_que = [0, 0, 0]
+
 
 for update in range(1000000):
     start = time.time()
@@ -179,8 +189,7 @@ for update in range(1000000):
     reward_ll_sum = 0
     done_sum = 0
     average_dones = 0.
-
-    
+    """
     if update % cfg['environment']['eval_every_n'] == 0:
         print("Visualizing and evaluating the current policy")
         torch.save({
@@ -196,53 +205,63 @@ for update in range(1000000):
         env.turn_on_visualization()
         env.start_video_recording(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "policy_"+str(update)+'.mp4')
 
-        contact_log = np.zeros((4, n_steps*2), dtype=np.float32) # 0: FR, 1: FL, 2: RR, 3:RL
+        for i in range(3):
+            print(f"{gait_dict[i]} evaluating ..")
+            CPG_signal = CPG_signal_dict[gait_dict[i]]
+            target_gait = np.asarray(target_gait_dict[gait_dict[update % 3]], dtype=np.float32)[np.newaxis, :]
 
-        for step in range(n_steps*2):
-            frame_start = time.time()
-            obs = env.observe(False)
-            # obs_and_target = np.concatenate((obs, CPG_signal), axis=1, dtype=np.float32)
-            action_ll = loaded_graph.architecture(torch.from_numpy(obs))
-            action_ll[:, 0] = torch.relu(action_ll[:, 0])
-            action_ll = action_ll.cpu().detach().numpy()
-            env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * CPG_signal[:, step] + action_ll[:, 1][:, np.newaxis]
-            env_action[:, [1, 3, 5, 7]] = action_ll[:, 2:]
-            reward_ll, dones = env.step(env_action)
-            frame_end = time.time()
-            wait_time = cfg['environment']['control_dt'] - (frame_end-frame_start)
-            if wait_time > 0.:
-                time.sleep(wait_time)
+            contact_log = np.zeros((4, n_steps*2), dtype=np.float32) # 0: FR, 1: FL, 2: RR, 3:RL
+            env.reset()
+
+            for step in range(n_steps*2):
+                frame_start = time.time()
+                obs = env.observe(False)
+                phase = ((step * cfg['environment']['control_dt']) / period) - int((step * cfg['environment']['control_dt']) / period)
+                obs = np.concatenate([obs, np.broadcast_to(phase, (env.num_envs, 1)).astype(np.float32), np.broadcast_to(target_gait, (env.num_envs, target_gait.shape[-1]))], axis=-1)
+                action_ll = loaded_graph.architecture(torch.from_numpy(obs))
+                action_ll[:, 0] = torch.relu(action_ll[:, 0])
+                action_ll = action_ll.cpu().detach().numpy()
+                env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * CPG_signal[:, step] + action_ll[:, 1][:, np.newaxis]
+                env_action[:, [1, 3, 5, 7]] = action_ll[:, 2:]
+                reward_ll, dones = env.step(env_action)
+                frame_end = time.time()
+                wait_time = cfg['environment']['control_dt'] - (frame_end-frame_start)
+                if wait_time > 0.:
+                    time.sleep(wait_time)
+                
+                # contact logging
+                env.contact_logging()
+                contact_log[:, step] = env.contact_log[0, :]
             
-            # contact logging
-            env.contact_logging()
-            contact_log[:, step] = env.contact_log[0, :]
-        
-        # save & plot contact log
-        np.savez_compressed(f'contact_plot/contact_{update}.npz', contact=contact_log)
+            # save & plot contact log
+            np.savez_compressed(f'contact_plot/contact_{update}_{gait_dict[i]}.npz', contact=contact_log)
 
-        start = 400
-        total_step = 200
-        single_step = 50
-        fig, ax = plt.subplots(1,1, figsize=(20,10))
-        img = ax.imshow(contact_log[:, start:start + total_step], aspect='auto')
-        x_label_list = [i*0.01 for i in range(start + single_step, start + total_step + 1, single_step)]
-        y_label_list = ['FR', 'FL', 'RR', 'RL']
-        ax.set_xticks([i for i in range(single_step, total_step + 1, single_step)])
-        ax.set_yticks([0, 1, 2, 3])
-        ax.set_xticklabels(x_label_list)
-        ax.set_yticklabels(y_label_list)
-        fig.colorbar(img)
-        ax.set_title("contact", fontsize=20)
-        ax.set_xlabel('time [s]')
-        plt.savefig(f'contact_plot/contact_{update}.png')
-        plt.close()
+            start = 400
+            total_step = 200
+            single_step = 50
+            fig, ax = plt.subplots(1,1, figsize=(20,10))
+            img = ax.imshow(contact_log[:, start:start + total_step], aspect='auto')
+            x_label_list = [i*0.01 for i in range(start + single_step, start + total_step + 1, single_step)]
+            y_label_list = ['FR', 'FL', 'RR', 'RL']
+            ax.set_xticks([i for i in range(single_step, total_step + 1, single_step)])
+            ax.set_yticks([0, 1, 2, 3])
+            ax.set_xticklabels(x_label_list)
+            ax.set_yticklabels(y_label_list)
+            fig.colorbar(img)
+            ax.set_title("contact", fontsize=20)
+            ax.set_xlabel('time [s]')
+            plt.savefig(f'contact_plot/contact_{update}_{gait_dict[i]}.png')
+            plt.close()
 
         env.stop_video_recording()
         env.turn_off_visualization()
 
         env.reset()
         env.save_scaling(saver.data_dir, str(update))
-    
+    """
+    CPG_signal = CPG_signal_dict[gait_dict[update % 3]]
+    target_gait = np.asarray(target_gait_dict[gait_dict[update % 3]], dtype=np.float32)[np.newaxis, :]
+
     # amplitude_history = np.zeros(n_steps)
     # shaft_history = np.zeros(n_steps)
     FR_thigh_joint_history = np.zeros(n_steps)
@@ -257,7 +276,8 @@ for update in range(1000000):
     # actual training
     for step in range(n_steps):
         obs, non_obs = env.observe_logging()
-        # obs_and_target = np.concatenate((obs, CPG_signal), axis=1, dtype=np.float32)
+        phase = ((step * cfg['environment']['control_dt']) / period) - int((step * cfg['environment']['control_dt']) / period)
+        obs = np.concatenate([obs, np.broadcast_to(phase, (env.num_envs, 1)).astype(np.float32), np.broadcast_to(target_gait, (env.num_envs, target_gait.shape[-1]))], axis=-1)
         action = ppo.observe(obs)
         # amplitude_history[step] = action[0, 0]
         # shaft_history[step] = action[0, 4]
@@ -369,8 +389,8 @@ for update in range(1000000):
 
     # take st step to get value obs
     obs, _ = env.observe_logging()
-    # obs_and_target = np.concatenate((obs, CPG_signal), axis=1, dtype=np.float32)
-    # ppo.update(actor_obs=obs_and_target, value_obs=obs, log_this_iteration=update % 10 == 0, update=update, auxilory_value=sin_fitting_loss[:, np.newaxis])
+    phase = ((n_steps * cfg['environment']['control_dt']) / period) - int((n_steps * cfg['environment']['control_dt']) / period)
+    obs = np.concatenate([obs, np.broadcast_to(phase, (env.num_envs, 1)).astype(np.float32), np.broadcast_to(target_gait, (env.num_envs, target_gait.shape[-1]))], axis=-1)
     ppo.update(actor_obs=obs, value_obs=obs,
                log_this_iteration=update % 10 == 0, update=update)
     average_ll_performance = reward_ll_sum / total_steps
@@ -379,6 +399,22 @@ for update in range(1000000):
 
     actor.distribution.enforce_minimum_std(
         (torch.ones(act_dim)*0.2).to(device))
+
+    success_que.pop()
+    if average_dones == 0:
+        success_que.insert(0, 1)
+    else:
+        success_que.insert(0, 0)
+    
+    if success_que == [1, 1, 1] and average_ll_performance > 0.7:
+        torch.save({
+            'actor_architecture_state_dict': actor.architecture.state_dict(),
+            'actor_distribution_state_dict': actor.distribution.state_dict(),
+            'critic_architecture_state_dict': critic.architecture.state_dict(),
+            'optimizer_state_dict': ppo.optimizer.state_dict(),
+        }, saver.data_dir+"/full_"+str(update)+ '_done'+ '.pt')
+        env.save_scaling(saver.data_dir, str(update))
+        
 
     end = time.time()
     # pdb.set_trace()

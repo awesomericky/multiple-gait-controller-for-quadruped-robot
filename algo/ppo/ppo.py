@@ -93,12 +93,18 @@ class PPO:
         return self.actions.cpu().numpy()
 
     def step(self, value_obs, rews, dones):
-        values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
+        if self.PPO_type == 'local' or self.PPO_type == None:
+            values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
+        elif self.PPO_type == 'CPG':
+            values = torch.zeros(rews.shape).to(self.device)
         self.storage.add_transitions(self.actor_obs, value_obs, self.actions, rews, dones, values,
                                      self.actions_log_prob)
 
     def update(self, actor_obs, value_obs, log_this_iteration, update, auxilory_value=None):
-        last_values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
+        if self.PPO_type == 'local' or self.PPO_type == None:
+            last_values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
+        elif self.PPO_type == 'CPG':
+            last_values = torch.zeros((value_obs.shape[0], 1))
 
         # Add auxilary reward for each step
         # self.storage.add_auxiliary_reward(auxilory_value)

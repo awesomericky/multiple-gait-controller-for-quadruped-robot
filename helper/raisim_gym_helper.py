@@ -31,7 +31,7 @@ def tensorboard_launcher(directory_path):
     # webbrowser.open_new(url)  # not wanted to be automatically opened
 
 
-def load_param(weight_path, env, actor, critic, optimizer, data_dir, type):
+def load_param(weight_path, env, actor, critic, optimizer, data_dir, type=None):
     assert type in ['CPG', 'local'], 'Unavailable loading parameter type'
 
     if weight_path == "":
@@ -61,7 +61,7 @@ def load_param(weight_path, env, actor, critic, optimizer, data_dir, type):
         actor.distribution.load_state_dict(checkpoint['CPG_actor_distribution_state_dict'])
         critic.architecture.load_state_dict(checkpoint['CPG_critic_architecture_state_dict'])
         optimizer.load_state_dict(checkpoint['CPG_optimizer_state_dict'])
-    elif type == 'local':
+    elif type == 'local' or type == None:
         actor.architecture.load_state_dict(checkpoint['actor_architecture_state_dict'])
         actor.distribution.load_state_dict(checkpoint['actor_distribution_state_dict'])
         critic.architecture.load_state_dict(checkpoint['critic_architecture_state_dict'])

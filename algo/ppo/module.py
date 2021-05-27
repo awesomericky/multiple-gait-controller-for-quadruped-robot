@@ -128,6 +128,7 @@ class MultivariateGaussianDiagonalCovariance(nn.Module):
         super(MultivariateGaussianDiagonalCovariance, self).__init__()
         self.dim = dim
         self.std = nn.Parameter(init_std * torch.ones(dim))
+        # self.std = init_std * torch.ones(dim)
         self.distribution = None
 
     def sample(self, logits):

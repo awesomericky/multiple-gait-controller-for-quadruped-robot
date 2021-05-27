@@ -8,13 +8,13 @@ environment:
   eval_every_n: 100
   num_threads: 30
   simulation_dt: 0.0025
-  CPG_control_dt: 4.0
+  CPG_control_dt: 2.0
   control_dt: 0.01
-  max_time: 20.0
+  max_time: 200.0
   n_reward: 5
   CPG_reward:
     forwardVel_difference:
-      coeff: 0.1
+      coeff: 0.0
     GRF_entropy:
       coeff: 0.3
   reward:
