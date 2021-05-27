@@ -8,22 +8,23 @@ environment:
   eval_every_n: 100
   num_threads: 30
   simulation_dt: 0.0025
-  CPG_control_dt: 2.0
+  CPG_control_dt: 0.05
   control_dt: 0.01
-  max_time: 200.0
+  velocity_sampling_dt: 2.0
+  max_time: 4.0
   n_reward: 5
   CPG_reward:
     forwardVel_difference:
-      coeff: 0.0
-    GRF_entropy:
       coeff: 0.3
+    GRF_entropy:
+      coeff: 0.0
   reward:
     forwardVel_difference:
       coeff: 0.3
     torque:
       coeff: -4e-5
     height:
-      coeff: 0.3 #0.3
+      coeff: 0.0 #0.3
     orientation:
       coeff: 0.3 #0.3
     leg_work_entropy:
@@ -36,7 +37,9 @@ environment:
       # coeff: 0.0
   velocity:
     min: 1
-    max: 3
+    max: 4
+  gait: 'pace'
+  single_velocity: True
 
 architecture:
   policy_net: [128, 128]

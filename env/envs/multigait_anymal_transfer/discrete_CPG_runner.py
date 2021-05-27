@@ -18,24 +18,20 @@ import matplotlib.pyplot as plt
 import pdb
 
 """
-# TODO
-
-1. Check result for pace, bound (experiment with excel row 52, 58)
-2. Think way for hierarchical RL w/ reward
-(3. Test w/ small std?)
-
-1) Fix std value
-2) Check logging (+ x axis value little bit strange)
-3) Check gradient for each policy
+This file is for discrete CPG runner. 
+The CPG signal is narrowed down to three types (pace, trot, bound)
 
 """
 
 
-def sin(x, a, b, c, d):
-    return a * np.sin(b*x + c) + d
+def sin(x, a, b):
+    return np.sin(a*x + b)
+
+def sin_derivatice(x, a, b):
+    return a * np.cos(a*x + b)
 
 # task specification
-task_name = "multigait_anymal_transfer"
+task_name = "single_CPG_w_velocity_change"
 
 # configuration
 parser = argparse.ArgumentParser()
@@ -61,18 +57,25 @@ cfg = YAML().load(open(task_path + "/cfg.yaml", 'r'))
 env = VecEnv(multigait_anymal_transfer.RaisimGymEnv(home_path + "/rsc",
              dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
 
+target_gait_dict = {'pace': [np.pi, 0, np.pi, 0], 'trot': [np.pi, 0, 0, np.pi], 'bound': [np.pi, np.pi, 0, 0]}
+
 # shortcuts
 ob_dim = env.num_obs  # 26 (w/ HAA joints fixed)
 act_dim = env.num_acts - 2  # 8 - 2 (w/ HAA joints fixed)
-CPG_signal_dim = 5
+CPG_signal_dim = 1
+CPG_signal_state_dim = 4
 
 # Training
 n_CPG_steps = math.floor(cfg['environment']['max_time'] /
                          cfg['environment']['CPG_control_dt'])
-n_steps = math.floor(cfg['environment']['CPG_control_dt'] /
+n_steps = math.floor(cfg['environment']['max_time'] /
                      cfg['environment']['control_dt'])
 total_CPG_steps = n_CPG_steps * env.num_envs
 total_steps = n_steps * env.num_envs
+CPG_period = int(cfg['environment']['CPG_control_dt'] / cfg['environment']['control_dt'])  # 5
+velocity_period = int(cfg['environment']['velocity_sampling_dt'] / cfg['environment']['control_dt'])  # 200
+
+assert velocity_period % CPG_period == 0, "velocity_sampling_dt should be integer multiple of CPG_control_dt"
 
 min_vel = cfg['environment']['velocity']['min']
 max_vel = cfg['environment']['velocity']['max']
@@ -81,16 +84,16 @@ avg_rewards = []
 
 CPG_actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, 1, CPG_signal_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
-                             CPG_signal_dim, 0.3),  # 1.0
+                             CPG_signal_dim, 0.5),  # 1.0
                          device)
 CPG_critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['CPG_value_net'], nn.LeakyReLU, 1, 1),
                            device)
 
-actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + 2, act_dim),
+actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
                              act_dim, 1.0),  # 1.0
                          device)
-critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim + 2, 1),
+critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, 1),
                            device)
 
 saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
@@ -98,7 +101,8 @@ saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name
 
 # logging
 if cfg['logger'] == 'tb':
-    tensorboard_launcher(saver.data_dir+"/..")   # press refresh (F5) after the first ppo update
+    # tensorboard_launcher(saver.data_dir+"/..")   # press refresh (F5) after the first ppo update
+    pass
 elif cfg['logger'] == 'wandb':
     wandb.init(project='multigait', name='experiment 1', config=dict(cfg))
 
@@ -133,8 +137,8 @@ ppo = PPO.PPO(actor=actor,
               )
 
 if mode == 'retrain':
-    load_param(weight_path, env, CPG_actor, CPG_critic, CPG_ppo.optimizer, saver.data_dir)
-    load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir)
+    load_param(weight_path, env, CPG_actor, CPG_critic, CPG_ppo.optimizer, saver.data_dir, type='CPG')
+    load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir, type='local')
 
 """
 [Joint order]
@@ -176,15 +180,37 @@ if mode == 'retrain':
 
 """
 
-t_range = (np.arange(n_steps) * cfg['environment']['control_dt'])[np.newaxis, :]
-CPG_signal = np.zeros((env.num_envs, 4, n_steps))
-env_action = np.zeros((cfg['environment']['num_envs'], 8), dtype=np.float32)
+# t_range = (np.arange(n_steps) * cfg['environment']['control_dt'])[np.newaxis, :]
+target_gait_phase = np.array(target_gait_dict[cfg['environment']['gait']])
 
 for update in range(1000000):
     start = time.time()
-    average_ll_performance_total = []
-    average_dones_total = []
-    
+    env.reset()
+
+    reward_CPG_sum = 0
+    reward_local_sum = 0
+    done_sum = 0
+
+
+    CPG_a_new = np.zeros((env.num_envs, 1))
+    CPG_b_new = np.broadcast_to(target_gait_phase[:, np.newaxis], (env.num_envs, 4, 1))
+    CPG_a_old = np.zeros((env.num_envs, 1))
+    CPG_b_old = np.broadcast_to(target_gait_phase[:, np.newaxis], (env.num_envs, 4, 1))
+    CPG_signal = np.zeros((env.num_envs, 4, n_steps + 1), dtype=np.float32)
+    # CPG_signal_derivative = np.zeros((env.num_envs, 4, n_steps + 1), dtype=np.float32)
+    CPG_rewards = np.zeros((env.num_envs, 1), dtype=np.float32)
+
+    env_action = np.zeros((env.num_envs, 8), dtype=np.float32)
+
+    FR_thigh_joint_history = np.zeros(n_steps)
+    FR_calf_joint_history = np.zeros(n_steps)
+    FL_thigh_joint_history = np.zeros(n_steps)
+    FL_calf_joint_history = np.zeros(n_steps)
+    RR_thigh_joint_history = np.zeros(n_steps)
+    RR_calf_joint_history = np.zeros(n_steps)
+    RL_thigh_joint_history = np.zeros(n_steps)
+    RL_calf_joint_history = np.zeros(n_steps)
+
     """
     if update % cfg['environment']['eval_every_n'] == 0:
         print("Visualizing and evaluating the current policy")
@@ -208,14 +234,16 @@ for update in range(1000000):
         env.start_video_recording(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "policy_"+str(update)+'.mp4')
 
         contact_log = np.zeros((4, n_steps*4), dtype=np.float32) # 0: FR, 1: FL, 2: RR, 3:RL
+        previous_CPG = np.zeros((env.num_envs, CPG_signal_dim), dtype=np.float32)
 
         for CPG_step in range(4):
 
             normalized_velocity = np.broadcast_to(np.random.uniform(low = 0, high=1, size=1)[:, np.newaxis], (env.num_envs, 1)).astype(np.float32)
             velocity = normalized_velocity * (max_vel - min_vel) + min_vel
-            CPG_obs = normalized_velocity
+            CPG_obs = np.concatenate([normalized_velocity, previous_CPG], axis=1)
             env.set_target_velocity(velocity)
             current_CPG = CPG_loaded_graph.architecture(torch.from_numpy(CPG_obs)).cpu().detach().numpy()
+            previous_CPG = current_CPG
 
             # generate target signal
             period = current_CPG[:, 0][:, np.newaxis]  # [s]
@@ -256,115 +284,123 @@ for update in range(1000000):
 
         """
 
-    for CPG_step in range(n_CPG_steps):
-        env.reset()
-
-        normalized_velocity = np.random.uniform(low = 0, high=1, size=env.num_envs)[:, np.newaxis].astype(np.float32)
-        velocity = normalized_velocity * (max_vel - min_vel) + min_vel
-        CPG_obs = normalized_velocity
-        env.set_target_velocity(velocity)
-        current_CPG = CPG_ppo.observe(CPG_obs)
-
-        if CPG_step % 4 == 0  and 1 < cfg['environment']['num_envs']:
-            CPG_ppo.extra_log(current_CPG, update * n_CPG_steps + CPG_step, type='action')
-        
-        # generate target signal
-        period = current_CPG[:, 0][:, np.newaxis]  # [s]
-        period_param = 2 * np.pi / period
-        for i in range(4):
-            # 0: FR, 1: FL, 2: RR, 3: RL
-            CPG_signal[:, i, :] = sin(t_range, 1, period_param, np.pi * current_CPG[:, i+1][:, np.newaxis], 0.0)
-
-        CPG_rewards = np.zeros((env.num_envs, 1))
-    
-        FR_thigh_joint_history = np.zeros(n_steps)
-        FR_calf_joint_history = np.zeros(n_steps)
-        FL_thigh_joint_history = np.zeros(n_steps)
-        FL_calf_joint_history = np.zeros(n_steps)
-        RR_thigh_joint_history = np.zeros(n_steps)
-        RR_calf_joint_history = np.zeros(n_steps)
-        RL_thigh_joint_history = np.zeros(n_steps)
-        RL_calf_joint_history = np.zeros(n_steps)
-
-        reward_ll_sum = 0
-        done_sum = 0
-        average_dones = 0.
-
-        # actual training
-        for step in range(n_steps):
-            obs, non_obs = env.observe_logging()
-            phase = ((step * cfg['environment']['control_dt']) / period) - ((step * cfg['environment']['control_dt']) / period).astype(int)
-            obs = np.concatenate([obs, normalized_velocity, phase], axis=1, dtype=np.float32)
-            action = ppo.observe(obs)
-
-            if update % 50 == 0:
-                FR_thigh_joint_history[step] = non_obs[0, 4]
-                FR_calf_joint_history[step] = non_obs[0, 5]
-                FL_thigh_joint_history[step] = non_obs[0, 6]
-                FL_calf_joint_history[step] = non_obs[0, 7]
-                RR_thigh_joint_history[step] = non_obs[0, 8]
-                RR_calf_joint_history[step] = non_obs[0, 9]
-                RL_thigh_joint_history[step] = non_obs[0, 10]
-                RL_calf_joint_history[step] = non_obs[0,11]
-
-            # Architecture 5
-            env_action[:, [0, 2, 4, 6]] = action[:, 0][:, np.newaxis] * CPG_signal[:, :, step] + action[:, 1][:, np.newaxis]
-            env_action[:, [1, 3, 5, 7]] = action[:, 2:]
-
-            reward, dones = env.step(env_action)
-            env.get_CPG_reward()
-            temp_CPG_rewards = env._CPG_reward
-            CPG_rewards += (temp_CPG_rewards * (1 - dones))[:, np.newaxis]
-            ppo.step(value_obs=obs, rews=reward, dones=dones)
-            done_sum = done_sum + sum(dones)
-            reward_ll_sum = reward_ll_sum + sum(reward)
-
-            if (CPG_step % 4 == 0) and (step % 25 == 0) and 1 < cfg['environment']['num_envs']:
-                env.reward_logging()
-                ppo.extra_log(env.reward_log, (update * n_CPG_steps * n_steps) + (CPG_step * n_steps) + step, type='reward')
+    for step in range(n_steps):
+        if step % CPG_period == 0:
+            if step % velocity_period == 0:
+                # sample new velocity
+                if cfg['environment']['single_velocity']:
+                    normalized_velocity = np.broadcast_to(np.random.uniform(low = 0, high=1, size=1)[:, np.newaxis], (env.num_envs, 1)).astype(np.float32)
+                else:
+                    normalized_velocity = np.random.uniform(low = 0, high=1, size=env.num_envs)[:, np.newaxis].astype(np.float32)
+                velocity = normalized_velocity * (max_vel - min_vel) + min_vel
+                env.set_target_velocity(velocity)
             
-            if (CPG_step % 4 == 0) and (step % 25 == 0) and 1 < cfg['environment']['num_envs']:
-                ppo.extra_log(action, (update * n_CPG_steps * n_steps) + (CPG_step * n_steps) + step, type='action')
+            # generate new CPG signal parameter
+            CPG_a_old = CPG_a_new.copy()
+            CPG_b_old = CPG_b_new.copy()
+            CPG_signal_period = CPG_ppo.observe(normalized_velocity)  # CPG_ppo policy outputs period
+            CPG_a_new = 2 * np.pi / (CPG_signal_period + 1e-6)
+            CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old
+
+            # generate CPG signal
+            t_period = CPG_period + 1 if (step == n_steps - CPG_period) else CPG_period
+            t_range = (np.arange(step, step + t_period) * cfg['environment']['control_dt'])[np.newaxis, np.newaxis, :]
+            CPG_signal[:, :, step:step + t_period] = sin(t_range, CPG_a_new[:, :, np.newaxis], CPG_b_new)
+            # CPG_signal & CPG_signal_derivative dimension change is as following
+            # (1, 1, CPG_period) (n_env, 1, 1) (n_env, 4, 1)  ==> (n_env, 4, CPG_period)
             
-        if update % 100 == 0:
-            joint_angle_plotting(update, np.squeeze(t_range), CPG_signal[0],\
-                                 FR_thigh_joint_history, FL_thigh_joint_history, RR_thigh_joint_history, RL_thigh_joint_history,\
-                                 FR_calf_joint_history, FL_calf_joint_history, RR_calf_joint_history, RL_calf_joint_history)
+        obs, non_obs = env.observe_logging()
         
-        # take st step to get value obs
-        obs, _ = env.observe_logging()
-        phase = ((n_steps * cfg['environment']['control_dt']) / period) - ((n_steps * cfg['environment']['control_dt']) / period).astype(int)
-        obs = np.concatenate([obs, normalized_velocity, phase], axis=1, dtype=np.float32)
-        ppo.update(actor_obs=obs, value_obs=obs,
-                log_this_iteration=update % 10 == 0, update=update)
-        actor.distribution.enforce_minimum_std((torch.ones(act_dim)*0.2).to(device))
+        CPG_phase = ((step * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :]) \
+                    - (((step * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :])).astype(int)
+        CPG_phase = np.squeeze(CPG_phase)
+        assert (0 <= CPG_phase).all() and (CPG_phase <= 1).all(), "CPG_phase not in correct range"
         
-        CPG_ppo.step(value_obs=CPG_obs, rews=CPG_rewards, dones=np.zeros(env.num_envs).astype(bool))
+        obs = np.concatenate([obs, CPG_signal_period, CPG_phase], axis=1, dtype=np.float32)
+        action = ppo.observe(obs)
 
-        if (CPG_step % 4 == 0):
-            CPG_ppo.extra_log(CPG_rewards, update * n_CPG_steps + CPG_step, type='reward')
+        # save joint value for plotting
+        if update % 50 == 0:
+            FR_thigh_joint_history[step] = non_obs[0, 4]
+            FR_calf_joint_history[step] = non_obs[0, 5]
+            FL_thigh_joint_history[step] = non_obs[0, 6]
+            FL_calf_joint_history[step] = non_obs[0, 7]
+            RR_thigh_joint_history[step] = non_obs[0, 8]
+            RR_calf_joint_history[step] = non_obs[0, 9]
+            RL_thigh_joint_history[step] = non_obs[0, 10]
+            RL_calf_joint_history[step] = non_obs[0,11]
 
-        average_ll_performance = reward_ll_sum / total_steps
-        average_ll_performance_total.append(average_ll_performance)
-        average_dones = done_sum / total_steps
-        average_dones_total.append(average_dones)
-    
+        # Architecture 5
+        env_action[:, [0, 2, 4, 6]] = action[:, 0][:, np.newaxis] * CPG_signal[:, :, step] + action[:, 1][:, np.newaxis]
+        env_action[:, [1, 3, 5, 7]] = action[:, 2:]
+
+        reward, dones = env.step(env_action)
+        env.get_CPG_reward()
+        temp_CPG_rewards = env._CPG_reward
+        CPG_rewards += (temp_CPG_rewards * (1 - dones))[:, np.newaxis]
+        ppo.step(value_obs=obs, rews=reward, dones=dones)
+        done_sum += sum(dones)
+        reward_local_sum += sum(reward)
+
+        # update CPG rewards in storage
+        if (step + 1) % CPG_period == 0:
+            CPG_ppo.step(value_obs=normalized_velocity, rews=CPG_rewards, dones=np.zeros(env.num_envs).astype(bool))
+            """
+            if (update % 5) and ((step + 1) % (CPG_period * 10) == 0) and (1 < cfg['environment']['num_envs']):
+                CPG_ppo.extra_log(CPG_rewards, update * n_steps + step, type='reward')
+                CPG_ppo.extra_log(CPG_signal_period, update * n_steps + step, type='action')
+                CPG_ppo.extra_log(velocity, update * n_steps + step, type='target_veloicty')
+            """
+            reward_CPG_sum += np.sum(CPG_rewards)
+            CPG_rewards = np.zeros((env.num_envs, 1), dtype=np.float32)
+        
+        # log reward for CPG policy
+        """
+        if (update % 5) and (step % 25) and (1 < cfg['environment']['num_envs']):
+            env.reward_logging()
+            ppo.extra_log(env.reward_log, update * n_steps + step, type='reward')
+            ppo.extra_log(action, update * n_steps + step, type='action')
+        """
+
+    # update CPG policy
     normalized_velocity = np.zeros(env.num_envs)[:, np.newaxis].astype(np.float32)
-    CPG_obs = normalized_velocity
-    CPG_ppo.update(actor_obs=CPG_obs, value_obs=CPG_obs,
+    CPG_ppo.update(actor_obs=normalized_velocity, value_obs=normalized_velocity,
                    log_this_iteration=update % 10 == 0, update=update)
-    CPG_actor.distribution.enforce_minimum_std((torch.ones(CPG_signal_dim)*0.1).to(device))
+    CPG_actor.distribution.enforce_minimum_std((torch.ones(CPG_signal_dim)*0.03).to(device))
 
-    average_ll_performance_total = np.mean(average_ll_performance_total)
-    average_dones_total = np.mean(average_dones_total)
+    # update local policy
+    obs, _ = env.observe_logging()
+    
+    CPG_phase = ((n_steps * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :]) \
+                    - (((n_steps * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :])).astype(int)
+    CPG_phase = np.squeeze(CPG_phase)
+    assert (0 <= CPG_phase).all() and (CPG_phase <= 1).all(), "CPG_phase not in correct range"
+
+    obs = np.concatenate([obs, CPG_signal_period, CPG_phase], axis=1, dtype=np.float32)
+    ppo.update(actor_obs=obs, value_obs=obs,
+            log_this_iteration=update % 10 == 0, update=update)
+    actor.distribution.enforce_minimum_std((torch.ones(act_dim)*0.2).to(device))
+
+    # compute average performance
+    average_CPG_performance = reward_CPG_sum / total_CPG_steps
+    average_local_performance = reward_local_sum / total_steps
+    average_dones = done_sum / total_steps
+
+    # plot joint value
+    if update % 50 == 0:
+        joint_angle_plotting(update, np.arange(n_steps) * cfg['environment']['control_dt'], CPG_signal[0, :, :-1],\
+                                FR_thigh_joint_history, FL_thigh_joint_history, RR_thigh_joint_history, RL_thigh_joint_history,\
+                                FR_calf_joint_history, FL_calf_joint_history, RR_calf_joint_history, RL_calf_joint_history)
+
     end = time.time()
 
     print('----------------------------------------------------')
     print('{:>6}th iteration'.format(update))
-    print('{:<40} {:>6}'.format("average ll reward: ",
-        '{:0.10f}'.format(average_ll_performance_total)))
-    # print('{:<40} {:>6}'.format("sin fitting reward: ", '{:0.10f}'.format(np.mean(sin_fitting_loss))))
-    print('{:<40} {:>6}'.format("dones: ", '{:0.6f}'.format(average_dones_total)))
+    print('{:<40} {:>6}'.format("average CPG reward: ",
+        '{:0.10f}'.format(average_CPG_performance)))
+    print('{:<40} {:>6}'.format("average local reward: ",
+        '{:0.10f}'.format(average_local_performance)))
+    print('{:<40} {:>6}'.format("dones: ", '{:0.6f}'.format(average_dones)))
     print('{:<40} {:>6}'.format(
         "time elapsed in this iteration: ", '{:6.4f}'.format(end - start)))
     print('{:<40} {:>6}'.format(

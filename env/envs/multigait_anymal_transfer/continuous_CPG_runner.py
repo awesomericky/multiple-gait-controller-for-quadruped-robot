@@ -18,16 +18,11 @@ import matplotlib.pyplot as plt
 import pdb
 
 """
-# TODO
+This file is for continuous CPG runner.
+The CPG signal could produce continuous signal.
+Also it could change it continuously b using the previous CPG param included in state.
 
-1. Check result for pace, bound (experiment with excel row 52, 58)
-2. Think way for hierarchical RL w/ reward
-(3. Test w/ small std?)
-
-1) Fix std value
-2) Check logging (+ x axis value little bit strange)
-3) Check gradient for each policy
-
+It is for future. Not yet :)
 """
 
 

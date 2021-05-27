@@ -96,7 +96,8 @@ class PPO:
         if self.PPO_type == 'local' or self.PPO_type == None:
             values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
         elif self.PPO_type == 'CPG':
-            values = torch.zeros(rews.shape).to(self.device)
+            # values = torch.zeros(rews.shape).to(self.device)
+            values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
         self.storage.add_transitions(self.actor_obs, value_obs, self.actions, rews, dones, values,
                                      self.actions_log_prob)
 
@@ -104,7 +105,8 @@ class PPO:
         if self.PPO_type == 'local' or self.PPO_type == None:
             last_values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
         elif self.PPO_type == 'CPG':
-            last_values = torch.zeros((value_obs.shape[0], 1))
+            # last_values = torch.zeros((value_obs.shape[0], 1))
+            last_values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
 
         # Add auxilary reward for each step
         # self.storage.add_auxiliary_reward(auxilory_value)
@@ -146,11 +148,13 @@ class PPO:
                 if type == 'reward':
                     self.writer.add_scalar('CPG/Reward/mean', np.mean(log_value), step)
                 elif type == 'action':
-                    self.writer.add_scalar('CPG/period/mean', np.mean(log_value[:, 0]), step)
-                    self.writer.add_scalar('CPG/FR_phase/mean', np.mean(log_value[:, 1]), step)
-                    self.writer.add_scalar('CPG/FL_phase/mean', np.mean(log_value[:, 2]), step)
-                    self.writer.add_scalar('CPG/RR_phase/mean', np.mean(log_value[:, 3]), step)
-                    self.writer.add_scalar('CPG/RL_phase/mean', np.mean(log_value[:, 4]), step)
+                    self.writer.add_scalar('CPG/period/mean', np.mean(log_value), step)
+                    # self.writer.add_scalar('CPG/FR_phase/mean', np.mean(log_value[:, 1]), step)
+                    # self.writer.add_scalar('CPG/FL_phase/mean', np.mean(log_value[:, 2]), step)
+                    # self.writer.add_scalar('CPG/RR_phase/mean', np.mean(log_value[:, 3]), step)
+                    # self.writer.add_scalar('CPG/RL_phase/mean', np.mean(log_value[:, 4]), step)
+                elif type == 'target_veloicty':
+                    self.writer.add_scalar('CPG/target_velocity/mean', np.mean(log_value), step)
             elif self.PPO_type == 'local':
                 if type == 'reward':
                     self.writer.add_scalar('Local/Reward/torque/mean', np.mean(log_value[:, 0]), step)
@@ -159,7 +163,7 @@ class PPO:
                     # self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
                     self.writer.add_scalar('Local/Reward/height/mean', np.mean(log_value[:, 2]), step)
                     self.writer.add_scalar('Local/Reward/orientation/mean', np.mean(log_value[:, 3]), step)
-                    self.writer.add_scalar('CPG/Reward/GRF_entropy/mean', np.mean(log_value[:, 4]), step)
+                    # self.writer.add_scalar('CPG/Reward/GRF_entropy/mean', np.mean(log_value[:, 4]), step)
                     # self.writer.add_scalar('Reward/LegWorkEntropy/mean', np.mean(log_value[:, 4]), step)
                     # self.writer.add_scalar('Reward/uncontactPenalty/mean', np.mean(log_value[:, 5]), step)
                     # self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 4]), step)
