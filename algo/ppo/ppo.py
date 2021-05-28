@@ -176,7 +176,7 @@ class PPO:
                     self.writer.add_scalar('Local/CPG_tranform/FR_calf/mean', np.mean(log_value[:, 2]), step)
                     self.writer.add_scalar('Local/CPG_tranform/FL_calf/mean', np.mean(log_value[:, 3]), step)
                     self.writer.add_scalar('Local/CPG_tranform/RR_calf/mean', np.mean(log_value[:, 4]), step)
-                    self.writer.add_scalar('Local/CPG_tranform/RL_calf/mean', np.mean(log_value[:, 5]), step)
+                    # self.writer.add_scalar('Local/CPG_tranform/RL_calf/mean', np.mean(log_value[:, 5]), step)
             else:
                 if type == 'reward':
                     self.writer.add_scalar('Reward/torque/mean', np.mean(log_value[:, 0]), step)

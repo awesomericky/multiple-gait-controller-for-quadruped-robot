@@ -63,6 +63,8 @@ namespace raisim
             CPG_reward_velocity_coeff = cfg["CPG_reward"]["forwardVel_difference"]["coeff"].As<double>();
             CPG_reward_GRF_coeff = cfg["CPG_reward"]["GRF_entropy"]["coeff"].As<double>();
 
+            height_threshold = cfg["reward"]["height"]["coeff"].As<double>();
+
             /// contact foot index
             contact_foot_idx.insert(anymal_->getBodyIdx("FR_calf"));
             contact_foot_idx.insert(anymal_->getBodyIdx("FL_calf"));
@@ -90,7 +92,7 @@ namespace raisim
 
             /// action scaling
             actionMean_ = gc_init_.tail(nJoints_);
-            actionStd_.setConstant(0.3);
+            actionStd_.setConstant(0.6);
 
             /// Reward coefficients
             rewards_.initializeFromConfigurationFile(cfg["reward"]);
@@ -148,10 +150,19 @@ namespace raisim
             // leg_work /= leg_work.sum();
             // leg_work += 1e-6;
             // leg_work_entropy = -(leg_work * leg_work.log()).sum();
-
-            rewards_.record("torque", joint_work.sum());
+            rewards_.record("torque", anymal_->getGeneralizedForce().squaredNorm());
             rewards_.record("forwardVel_difference", std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)));
-            rewards_.record("height", std::exp(-std::abs(gc_[2] - gc_init_[2])));
+
+            if (gc_[2] > gc_init_[2] + height_threshold) {
+                height_violation = gc_[2] - (gc_init_[2] + height_threshold);
+            }
+            else if (gc_[2] < gc_init_[2] - height_threshold) {
+                height_violation = (gc_init_[2] - height_threshold) - gc_[2];
+            }
+            else {
+                height_violation = 0;
+            }
+            rewards_.record("height", std::exp(-height_violation));
             rewards_.record("orientation", std::exp(-std::abs(pitch_and_yaw - 1)));
             // rewards_.record("leg_work_entropy", leg_work_entropy);
             // rewards_.record("uncontact_penalty", unContactPenalty);
@@ -166,9 +177,9 @@ namespace raisim
         void reward_logging(Eigen::Ref<EigenVec> rewards) final
         {
             reward_log.setZero(5);  ///////// Need to change!! Don't forget!! /////////////
-            reward_log[0] = joint_work.sum() * reward_torque_coeff;
+            reward_log[0] = anymal_->getGeneralizedForce().squaredNorm() * reward_torque_coeff;
             reward_log[1] = std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)) * reward_velocity_coeff;
-            reward_log[2] = std::exp(-std::abs(gc_[2] - gc_init_[2])) * reward_height_coeff;
+            reward_log[2] = std::exp(-height_violation) * reward_height_coeff;
             reward_log[3] = std::exp(-std::abs(pitch_and_yaw - 1)) * reward_orientation_coeff;
             // reward_log[4] = leg_work_entropy * reward_leg_work_coeff;
             // reward_log[5] = unContactPenalty;
@@ -288,7 +299,7 @@ namespace raisim
         double terminalRewardCoeff_ = -10., velocity, desired_velocity, reward_torque_coeff, pitch_and_yaw, leg_work_entropy;
         double reward_velocity_coeff, reward_impulse_coeff, reward_height_coeff, reward_orientation_coeff, GRF_entropy, GRF_impulse_reward, reward_leg_work_coeff;
         double CPG_reward_GRF_coeff, CPG_reward_velocity_coeff, CPG_rewards_;
-        double unContactPenalty = -5.;
+        double unContactPenalty = -5., height_threshold, height_violation;
         Eigen::VectorXd actionMean_, actionStd_, obDouble_, reward_log;
         Eigen::VectorXd single_contact_impulse;
         Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;

@@ -1,3 +1,4 @@
+import numpy as np
 import matplotlib.pyplot as plt
 
 
@@ -63,7 +64,7 @@ def joint_angle_plotting(update, t_range, CPG_signal, \
     plt.close()
 
 def contact_plotting(update, contact_log):
-    start = 400
+    start = 100
     total_step = 200
     single_step = 50
     fig, ax = plt.subplots(1,1, figsize=(20,10))
@@ -75,7 +76,18 @@ def contact_plotting(update, contact_log):
     ax.set_xticklabels(x_label_list)
     ax.set_yticklabels(y_label_list)
     fig.colorbar(img)
-    ax.set_title("contact", fontsize=20)
+    ax.set_title('contact', fontsize=20)
     ax.set_xlabel('time [s]')
     plt.savefig(f'contact_plot/contact_{update}.png')
+    plt.close()
+
+def CPG_and_velocity_plotting(update, n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj):
+    time_axis = np.arange(n_steps) * 0.01
+    plt.plot(time_axis, CPG_signal_period_traj, label='CPG_period')
+    plt.plot(time_axis, target_velocity_traj, label='target_velocity')
+    plt.plot(time_axis, real_velocity_traj, label='real_velocity')
+    plt.title('CPG and velocity', fontsize=20)
+    plt.xlabel('time [s]')
+    plt.legend()
+    plt.savefig(f'CPG_and_velocity_plot/CPG_vel_{update}.png')
     plt.close()

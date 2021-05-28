@@ -11,7 +11,7 @@ import os
 
 class RaisimGymVecEnv:
 
-    def __init__(self, impl, cfg, normalize_ob=True, seed=0, normalize_rew=True, clip_obs=10.):
+    def __init__(self, impl, cfg, normalize_ob=True, seed=0, normalize_rew=True, clip_obs=5.):  # 10.
         if platform.system() == "Darwin":
             os.environ['KMP_DUPLICATE_LIB_OK']='True'
         self.normalize_ob = normalize_ob
@@ -78,7 +78,7 @@ class RaisimGymVecEnv:
     
     def observe_logging(self, update_mean=True):
         self.wrapper.observe(self._observation)
-        not_normalized_obs = self._observation
+        not_normalized_obs = self._observation.copy()
 
         if self.normalize_ob:
             if update_mean:

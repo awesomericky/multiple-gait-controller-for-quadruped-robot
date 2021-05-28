@@ -24,7 +24,8 @@ environment:
     torque:
       coeff: -4e-5
     height:
-      coeff: 0.0 #0.3
+      threshold: 0.07 # penalty only given if the height is out of threhold
+      coeff: 0.3 #0.3
     orientation:
       coeff: 0.3 #0.3
     leg_work_entropy:
@@ -37,14 +38,14 @@ environment:
       # coeff: 0.0
   velocity:
     min: 1
-    max: 4
+    max: 3
   gait: 'pace'
   single_velocity: True
 
 architecture:
   policy_net: [128, 128]
   value_net: [128, 128]
-  CPG_policy_net: [64, 64]
-  CPG_value_net: [64, 64]
+  CPG_policy_net: [32]
+  CPG_value_net: [32]
 
 logger: 'tb'

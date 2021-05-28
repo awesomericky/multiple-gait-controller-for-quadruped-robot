@@ -17,32 +17,34 @@ class Actor:
 
     def sample(self, obs, PPO_type):
         if PPO_type == 'CPG':
-            logits = torch.sigmoid(self.architecture.architecture(obs))
+            logits = torch.relu(self.architecture.architecture(obs))
             actions, log_prob = self.distribution.sample(logits)
 
             ## For real action ##
-            actions = torch.sigmoid(actions)  # clipping amplitude (Architecture 5)
+            actions = torch.clamp(torch.relu(actions), min=0.1, max=1.)  # clipping amplitude (Architecture 5)
             # actions[:, 1:] = torch.tanh(actions[:, 1:])
             # actions[:, 2:] = torch.clamp(actions[:, 2:], min=-1, max=1)
             return actions.cpu().detach(), log_prob.cpu().detach()
 
         elif PPO_type == 'local' or PPO_type == None:
             logits = self.architecture.architecture(obs)
-            # logits[:, :4] = F.relu(logits[:, :4])  # clipping amplitude (Architecture 4)
             logits[:, 0] = torch.relu(logits[:, 0])  # clipping amplitude (Architecture 5)
-            # logits[:, 1:] = torch.tanh(logits[:, 1:])  # clipping shaft & calf (Architecture 5)
+            # logits[:, 2:] = torch.clamp(logits[:, 2:], min=-1.3, max=1.3)  # clipping shaft & calf (Architecture 5)
+            # logits[:, 1:] = torch.clamp(logits[:, 1:], min=-1.3, max=1.3)  # clipping shaft & calf (Architecture 5)
             actions, log_prob = self.distribution.sample(logits)
             # actions[:, :4] = F.relu(actions[:, :4])  # clipping amplitude (Architecture 4)
 
             ## For real action ##
             actions[:, 0] = torch.relu(actions[:, 0])  # clipping amplitude (Architecture 5)
+            # actions[:, 2:] = torch.clamp(actions[:, 2:], min=-1.3, max=1.3)
+            # actions[:, 1:] = torch.clamp(actions[:, 1:], min=-1.3, max=1.3)
             # actions[:, 1:] = torch.tanh(actions[:, 1:])
             # actions[:, 2:] = torch.clamp(actions[:, 2:], min=-1, max=1)
             return actions.cpu().detach(), log_prob.cpu().detach()
 
     def evaluate(self, obs, actions, PPO_type):
         if PPO_type == 'CPG':
-            action_mean = torch.sigmoid(self.architecture.architecture(obs))
+            action_mean = torch.relu(self.architecture.architecture(obs))
             return self.distribution.evaluate(obs, action_mean, actions)
         elif PPO_type == 'local' or PPO_type == None:
             action_mean = self.architecture.architecture(obs)
@@ -124,11 +126,14 @@ class MLP(nn.Module):
 
 
 class MultivariateGaussianDiagonalCovariance(nn.Module):
-    def __init__(self, dim, init_std):
+    def __init__(self, dim, init_std, type=None):
         super(MultivariateGaussianDiagonalCovariance, self).__init__()
         self.dim = dim
-        self.std = nn.Parameter(init_std * torch.ones(dim))
-        # self.std = init_std * torch.ones(dim)
+        if type == 'CPG':
+            self.std = init_std * torch.ones(dim) # fixed
+        else:
+            self.std = nn.Parameter(init_std * torch.ones(dim))  # trainable
+        
         self.distribution = None
 
     def sample(self, logits):
