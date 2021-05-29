@@ -47,29 +47,40 @@ namespace raisim
             pTarget_.setZero(gcDim_);
             vTarget_.setZero(gvDim_);
             pTarget12_.setZero(nJoints_);
+            previous_action.setZero(nJoints_);
+            current_action.setZero(nJoints_);
 
-            leg_work.setZero(4);
+            footPos_W.resize(4);
+            footVel_W.resize(4);
+            footContactVel_.resize(4);
+            // footNormal_.resize(4);
 
             /// desired velocity
             desired_velocity = 0.0;
 
             /// reward constant
-            reward_torque_coeff = cfg["reward"]["torque"]["coeff"].As<double>();
-            reward_velocity_coeff = cfg["reward"]["forwardVel_difference"]["coeff"].As<double>();
+            // reward_torque_coeff = cfg["reward"]["torque"]["coeff"].As<double>();
+            // reward_velocity_coeff = cfg["reward"]["forwardVel_difference"]["coeff"].As<double>();
             reward_height_coeff = cfg["reward"]["height"]["coeff"].As<double>();
-            reward_orientation_coeff = cfg["reward"]["orientation"]["coeff"].As<double>();
+            // reward_orientation_coeff = cfg["reward"]["orientation"]["coeff"].As<double>();
             // reward_impulse_coeff = cfg["reward"]["impulse"]["coeff"].As<double>();
             // reward_leg_work_coeff = cfg["reward"]["leg_work_entropy"]["coeff"].As<double>();
-            CPG_reward_velocity_coeff = cfg["CPG_reward"]["forwardVel_difference"]["coeff"].As<double>();
-            CPG_reward_GRF_coeff = cfg["CPG_reward"]["GRF_entropy"]["coeff"].As<double>();
+            // CPG_reward_velocity_coeff = cfg["CPG_reward"]["forwardVel_difference"]["coeff"].As<double>();
+            // CPG_reward_GRF_coeff = cfg["CPG_reward"]["GRF_entropy"]["coeff"].As<double>();
+            // CPG_reward_torque_coeff = cfg["CPG_reward"]["torque"]["coeff"].As<double>();
 
-            height_threshold = cfg["reward"]["height"]["coeff"].As<double>();
+            height_threshold = cfg["reward"]["height"]["threshold"].As<double>();
 
             /// contact foot index
             contact_foot_idx.insert(anymal_->getBodyIdx("FR_calf"));
             contact_foot_idx.insert(anymal_->getBodyIdx("FL_calf"));
             contact_foot_idx.insert(anymal_->getBodyIdx("RR_calf"));
             contact_foot_idx.insert(anymal_->getBodyIdx("RL_calf"));
+
+            foot_idx[0] = anymal_->getFrameIdxByName("FR_foot_fixed");  // 14
+            foot_idx[1] = anymal_->getFrameIdxByName("FL_foot_fixed");  // 16
+            foot_idx[2] = anymal_->getFrameIdxByName("RR_foot_fixed");  // 18
+            foot_idx[3] = anymal_->getFrameIdxByName("RL_foot_fixed");  // 20
 
             // nominal configuration of laikago
             gc_init_ << 0, 0, 0.46, 1, 0.0, 0.0, 0.0, 0.5, -1, 0.5, -1, 0.5, -1, 0.5, -1;
@@ -118,13 +129,16 @@ namespace raisim
         void reset() final
         {
             anymal_->setState(gc_init_, gv_init_);
+
             updateObservation();
+
         }
 
         float step(const Eigen::Ref<EigenVec> &action) final
         {
             /// action scaling
             pTarget12_ = action.cast<double>();
+            current_action = action.cast<double>();
             pTarget12_ = pTarget12_.cwiseProduct(actionStd_);
             pTarget12_ += actionMean_;
             pTarget_.tail(nJoints_) = pTarget12_;
@@ -144,14 +158,7 @@ namespace raisim
 
             torque = anymal_->getGeneralizedForce().e(); // squaredNorm
 
-            // Real
-            joint_work = (gv_.tail(8) * torque.tail(8)).array().abs() * control_dt_;
-            // leg_work << joint_work[0] + joint_work[1], joint_work[2] + joint_work[3], joint_work[4] + joint_work[5], joint_work[6] + joint_work[7];
-            // leg_work /= leg_work.sum();
-            // leg_work += 1e-6;
-            // leg_work_entropy = -(leg_work * leg_work.log()).sum();
-            rewards_.record("torque", anymal_->getGeneralizedForce().squaredNorm());
-            rewards_.record("forwardVel_difference", std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)));
+            calculate_cost();
 
             if (gc_[2] > gc_init_[2] + height_threshold) {
                 height_violation = gc_[2] - (gc_init_[2] + height_threshold);
@@ -162,30 +169,39 @@ namespace raisim
             else {
                 height_violation = 0;
             }
-            rewards_.record("height", std::exp(-height_violation));
-            rewards_.record("orientation", std::exp(-std::abs(pitch_and_yaw - 1)));
-            // rewards_.record("leg_work_entropy", leg_work_entropy);
-            // rewards_.record("uncontact_penalty", unContactPenalty);
 
-            CPG_rewards_ = GRF_entropy * CPG_reward_GRF_coeff + std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)) * CPG_reward_velocity_coeff;
-            // CPG_rewards_.record("GRF_entropy", GRF_entropy);
-            // CPG_rewards_.record("forwardVel_difference", std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)));
+            rewards_.record("joint_torque", -torqueCost);
+            rewards_.record("linear_vel_error", -linvelCost);
+            rewards_.record("angular_vel_error", -angVelCost);
+            rewards_.record("foot_clearance", -footClearanceCost);
+            rewards_.record("foot_slip", -slipCost);
+            rewards_.record("foot_z_vel", -footVelCost);
+            rewards_.record("joint_vel", -velLimitCost);
+            rewards_.record("previous_action_smooth", -previousActionCost);
+            rewards_.record("orientation", -orientationCost);
+            rewards_.record("height", std::exp(height_violation));
+
+            CPG_rewards_ = linvelCost + torqueCost;
+
+            previous_action = action.cast<double>();
 
             return rewards_.sum();
         }
 
         void reward_logging(Eigen::Ref<EigenVec> rewards) final
         {
-            reward_log.setZero(5);  ///////// Need to change!! Don't forget!! /////////////
-            reward_log[0] = anymal_->getGeneralizedForce().squaredNorm() * reward_torque_coeff;
-            reward_log[1] = std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)) * reward_velocity_coeff;
-            reward_log[2] = std::exp(-height_violation) * reward_height_coeff;
-            reward_log[3] = std::exp(-std::abs(pitch_and_yaw - 1)) * reward_orientation_coeff;
-            // reward_log[4] = leg_work_entropy * reward_leg_work_coeff;
-            // reward_log[5] = unContactPenalty;
-            reward_log[4] = GRF_entropy * CPG_reward_GRF_coeff;
-            // reward_log[5] = std::exp(-std::abs(bodyLinearVel_[0] - desired_velocity)) * CPG_reward_velocity_coeff;
-            // reward_log[7] = GRF_impulse_reward * reward_impulse_coeff;
+            reward_log.setZero(11);  ///////// Need to change!! Don't forget!! /////////////
+            reward_log[0] = -torqueCost;
+            reward_log[1] = -linvelCost;
+            reward_log[2] = -angVelCost;
+            reward_log[3] = -footClearanceCost;
+            reward_log[4] = -slipCost;
+            reward_log[5] = -footVelCost;
+            reward_log[6] = -velLimitCost;
+            reward_log[7] = -previousActionCost;
+            reward_log[8] = -orientationCost;
+            reward_log[9] = std::exp(-height_violation);
+            reward_log[10] = costScale_;
 
             rewards = reward_log.cast<float>();
         }
@@ -225,50 +241,10 @@ namespace raisim
                 bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity // dim=6 (3 + 3)
                 gv_.tail(8);                     /// joint velocity // dim=8 (w/ HAA joint fixed)
 
-            pitch_and_yaw = rot.e().row(2).transpose()[2];
+            pitch_and_yaw = rot.e().row(2).transpose();
+            GRF_impulse.setZero(4);
 
-            /// z axis contact impulse for each feet (= perpendicular GRF * dt)
-            total_contact_impulse.setZero(4);  // only perpendicular GRF
-            GRF_impulse.setZero(4);  // total GRF
-
-            // unContactPenalty = -5.;
-
-            // check all contacts
-            for (auto &contact : anymal_->getContacts())
-            {
-                if (contact.skip())
-                    continue; /// if the contact is internal, one contact point is set to 'skip'
-
-                single_contact_impulse = contact.getContactFrame().e().transpose() * contact.getImpulse()->e();
-
-                if (contact_foot_idx.find(contact.getlocalBodyIndex()) != contact_foot_idx.end())
-                {
-                    idx = int(int(contact.getlocalBodyIndex()) / 2) - 1;
-                    total_contact_impulse[idx] = std::max(double(single_contact_impulse[2]), 0.0);
-                    GRF_impulse[idx] = single_contact_impulse.squaredNorm() * control_dt_;
-                    // unContactPenalty = 0.;
-                }
-            }
-
-            if (total_contact_impulse.sum() < 1e-4) {
-                /// almost no contact between foot and ground
-                GRF_entropy = 0.0;
-            }
-            else {
-                /// compute perpendicular GRF entropy
-                total_contact_impulse = total_contact_impulse / total_contact_impulse.sum();
-                total_contact_impulse = total_contact_impulse + 1e-6;
-                GRF_entropy = -(total_contact_impulse * total_contact_impulse.log()).sum();
-            }
-
-            // if (GRF_impulse.sum() < 1e-4) {
-            //     /// almost no contact between foot and ground
-            //     GRF_impulse_reward = 0.0;
-            // }
-            // else {
-            //     GRF_impulse_reward = 1 / (GRF_impulse.sum() / 4);
-            // }
-
+            comprehend_contacts();
 
         }
 
@@ -276,6 +252,117 @@ namespace raisim
         {
             /// convert it to float
             ob = obDouble_.cast<float>();
+        }
+
+        void comprehend_contacts()
+        {
+            numContact_ = anymal_->getContacts().size();
+
+            numFootContact_ = 0;
+            numBodyContact_ = 0;
+            numBaseContact_ = 0;
+
+            for (int k = 0; k < 4; k++)
+            {
+                footContactState_[k] = false;
+                anymal_->getFramePosition(foot_idx[k], footPos_W[k]);  //position of the feet
+                anymal_->getFrameVelocity(foot_idx[k], footVel_W[k]);
+            }
+
+            raisim::Vec<3> vec3;
+
+            //Classify foot contact
+            if (numContact_ > 0)
+            {
+                for (int k = 0; k < numContact_; k++)
+                {
+                    if (!anymal_->getContacts()[k].skip())
+                    {
+                        int idx = anymal_->getContacts()[k].getlocalBodyIndex();
+
+                        // check foot height to distinguish shank contact
+                        // TODO: this only works for flat terrain
+                        if (idx == 2 && footPos_W[0][2] < 0.022 && !footContactState_[0])
+                        {
+                            footContactState_[0] = true;
+                            // footNormal_[0] = anymal_->getContacts()[k].getNormal().e();
+                            anymal_->getContactPointVel(k, vec3);
+                            footContactVel_[0] = vec3.e();
+                            numFootContact_++;
+                            GRF_impulse[0] = anymal_->getContacts()[k].getImpulse()->e().squaredNorm();
+                        }
+                        else if (idx == 4 && footPos_W[1][2] < 0.022 && !footContactState_[1])
+                        {
+                            footContactState_[1] = true;
+                            // footNormal_[1] = anymal_->getContacts()[k].getNormal().e();
+                            anymal_->getContactPointVel(k, vec3);
+                            footContactVel_[1] = vec3.e();
+                            numFootContact_++;
+                            GRF_impulse[1] = anymal_->getContacts()[k].getImpulse()->e().squaredNorm();
+                        }
+                        else if (idx == 6 && footPos_W[2][2] < 0.022 && !footContactState_[2])
+                        {
+                            footContactState_[2] = true;
+                            // footNormal_[2] = anymal_->getContacts()[k].getNormal().e();
+                            anymal_->getContactPointVel(k, vec3);
+                            footContactVel_[2] = vec3.e();
+                            numFootContact_++;
+                            GRF_impulse[2] = anymal_->getContacts()[k].getImpulse()->e().squaredNorm();
+                        }
+                        else if (idx == 8 && footPos_W[3][2] < 0.022 && !footContactState_[3])
+                        {
+                            footContactState_[3] = true;
+                            // footNormal_[3] = anymal_->getContacts()[k].getNormal().e();
+                            anymal_->getContactPointVel(k, vec3);
+                            footContactVel_[3] = vec3.e();
+                            numFootContact_++;
+                            GRF_impulse[3] = anymal_->getContacts()[k].getImpulse()->e().squaredNorm();
+                        }
+                    }
+                }
+            }
+        }
+
+        void calculate_cost()
+        {
+            double yawRateError = (gv_[5] - 0) * (gv_[5] - 0) * (4.0 + costScale_ * 5);
+
+            torqueCost = costScale_ * 0.05 * torque.tail(8).norm() * simulation_dt_;
+
+            const double velErr = std::max((4.0 + costScale_ * 5) * (desired_velocity - bodyLinearVel_[0]), 0.0);
+
+            linvelCost = -10.0 * simulation_dt_ / (exp(velErr) + 2.0 + exp(-velErr));
+
+            angVelCost = -6.0 * simulation_dt_ / (exp(yawRateError) + 2.0 + exp(-yawRateError));
+            // angVelCost += costScale_ * std::min(0.25 * u_.segment<2>(3).squaredNorm() * simulation_dt_, 0.002) / std::min(0.3 + 3.0 * commandNorm, 1.0);
+
+            double velLim = 0.0;
+            for (int i = 6; i < 14; i++)
+                if (fabs(gv_(i)) > velLim)
+                    velLimitCost += costScale_ * 0.3e-2 / std::min(0.09 + 2.5 * desired_velocity, 1.0) * (std::fabs(gv_[i]) - velLim) * (std::fabs(gv_[i]) - velLim) * simulation_dt_;
+
+            for (int i = 6; i < 14; i++)
+                if (fabs(gv_(i)) > velLim)
+                    velLimitCost += costScale_ * 0.2e-2 / std::min(0.09 + 2.5 * desired_velocity, 1.0) * std::fabs(gv_[i]) * simulation_dt_;
+
+            for (int i = 0; i < 4; i++)
+                footVelCost += costScale_ * 1e-1 / std::min(0.25 + 3.0 * desired_velocity, 1.0) * footVel_W[i][2] * footVel_W[i][2] * simulation_dt_;
+
+            for (int i = 0; i < 4; i++)
+            {
+                if (!footContactState_[i])
+                    footClearanceCost += costScale_ * 15.0 * pow(std::max(0.0, 0.07 - footPos_W[i][2]), 2) * footVel_W[i].e().head(2).norm() * simulation_dt_;
+                else
+                    slipCost += (costScale_ * (2.0 * footContactVel_[i].head(2).norm())) * simulation_dt_;
+            }
+
+            previousActionCost = 0.5 * costScale_ * (previous_action - current_action).norm() * simulation_dt_;
+
+            Eigen::Vector3d identityRot(0,0,1);
+            orientationCost = costScale_ * 0.4 * (pitch_and_yaw - identityRot).norm() * simulation_dt_;
+
+            cost = torqueCost + linvelCost + angVelCost + footClearanceCost + velLimitCost + slipCost + previousActionCost + orientationCost + footVelCost; //  ;
+
         }
 
         bool isTerminalState(float &terminalReward) final
@@ -291,19 +378,45 @@ namespace raisim
             return false;
         }
 
+        void increase_cost_scale() {
+            costScale_ = std::pow(costScale_, 0.997);
+        }
+
     private:
         int gcDim_, gvDim_, nJoints_, idx;
         bool visualizable_ = false;
         raisim::ArticulatedSystem *anymal_;
         Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_, pTarget12_, vTarget_, torque;
-        double terminalRewardCoeff_ = -10., velocity, desired_velocity, reward_torque_coeff, pitch_and_yaw, leg_work_entropy;
+        double terminalRewardCoeff_ = -10., velocity, desired_velocity, reward_torque_coeff, leg_work_entropy;
         double reward_velocity_coeff, reward_impulse_coeff, reward_height_coeff, reward_orientation_coeff, GRF_entropy, GRF_impulse_reward, reward_leg_work_coeff;
-        double CPG_reward_GRF_coeff, CPG_reward_velocity_coeff, CPG_rewards_;
+        double CPG_reward_GRF_coeff, CPG_reward_velocity_coeff, CPG_rewards_, CPG_reward_torque_coeff;
         double unContactPenalty = -5., height_threshold, height_violation;
         Eigen::VectorXd actionMean_, actionStd_, obDouble_, reward_log;
         Eigen::VectorXd single_contact_impulse;
-        Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
+        Eigen::Vector3d bodyLinearVel_, bodyAngularVel_, pitch_and_yaw;
         Eigen::ArrayXd total_contact_impulse, GRF_impulse, joint_work, leg_work;
         std::set<size_t> footIndices_, contact_foot_idx;
+        /////
+        std::vector<raisim::Vec<3>> footPos_;
+        std::vector<raisim::Vec<3>> footPos_W;
+        std::vector<raisim::Vec<3>> footVel_W;
+        std::vector<Eigen::Vector3d> footContactVel_;
+
+        Eigen::Vector4d foot_idx;
+
+        size_t numContact_;
+        size_t numFootContact_;
+        size_t numBodyContact_;
+        size_t numBaseContact_;
+
+        // Buffers for contact states
+        std::array<bool, 4> footContactState_;
+
+        double costScale_ = 0.3;
+        double simulation_dt = 0.0025;
+        double cost;
+        Eigen::VectorXd previous_action, current_action;
+
+        double torqueCost=0, linvelCost=0, angVelCost=0, velLimitCost = 0, footClearanceCost = 0, slipCost = 0, desiredHeightCost=0, previousActionCost = 0, orientationCost = 0, footVelCost = 0;
     };
 }

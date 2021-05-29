@@ -116,6 +116,9 @@ class RaisimGymVecEnv:
 
     def get_CPG_reward(self):
         self.wrapper.get_CPG_reward(self._CPG_reward)
+    
+    def increase_cost_scale(self):
+        self.wrapper.increase_cost_scale()
 
     @property
     def num_envs(self):

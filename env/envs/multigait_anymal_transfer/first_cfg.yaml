@@ -12,34 +12,32 @@ environment:
   control_dt: 0.01
   velocity_sampling_dt: 3.0
   max_time: 6.0
-  n_reward: 11
+  n_reward: 5
   CPG_reward:
     forwardVel_difference:
-      coeff: 1. # not matter
+      coeff: 0.5
     torque:
-      coeff: 1. # not matter
+      coeff: -4e-5
+    GRF_entropy:
+      coeff: 0.0
   reward:
-    joint_torque:
-      coeff: 1.
-    linear_vel_error:
-      coeff: 1.
-    angular_vel_error:
-      coeff: 1.
-    foot_clearance:
-      coeff: 1.
-    foot_slip:
-      coeff: 1.
-    foot_z_vel:
-      coeff: 1.
-    joint_vel:
-      coeff: 1.
-    previous_action_smooth:
-      coeff: 1.
-    orientation:
-      coeff: 1.
+    forwardVel_difference:
+      coeff: 0.5
+    torque:
+      coeff: -4e-5
     height:
       threshold: 0.07 # penalty only given if the height is out of threhold
-      coeff: 0.0 #0.3
+      coeff: 0.2 #0.3
+    orientation:
+      coeff: 0.2 #0.3
+    leg_work_entropy:
+      coeff: 0.0
+    uncontact_penalty:
+      coeff: 0.0
+    # GRF_entropy:
+      # coeff: 0.0
+    # impulse:
+      # coeff: 0.0
   velocity:
     min: 0.5
     max: 3.5

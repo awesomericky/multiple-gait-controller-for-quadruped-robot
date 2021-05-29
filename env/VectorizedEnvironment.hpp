@@ -66,6 +66,22 @@ class VectorizedEnvironment {
       env->reset();
   }
 
+  void increase_cost_scale() {
+    for (auto env: environments_)
+      env->increase_cost_scale();
+  }
+
+  void calculate_cost(){
+    for (auto env: environments_)
+      env->calculate_cost();
+  }
+
+  void comprehend_contacts(){
+    for (auto env: environments_)
+      env->comprehend_contacts();
+  }
+  
+
   void observe(Eigen::Ref<EigenRowMajorMat> &ob) {
 #pragma omp parallel for
     for (int i = 0; i < num_envs_; i++)

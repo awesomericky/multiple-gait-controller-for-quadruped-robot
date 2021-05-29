@@ -41,6 +41,9 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def("contact_logging", &VectorizedEnvironment<ENVIRONMENT>::contact_logging)
     .def("set_target_velocity", &VectorizedEnvironment<ENVIRONMENT>::set_target_velocity)
     .def("get_CPG_reward", &VectorizedEnvironment<ENVIRONMENT>::get_CPG_reward)
+    .def("increase_cost_scale", &VectorizedEnvironment<ENVIRONMENT>::increase_cost_scale)
+    .def("calculate_cost", &VectorizedEnvironment<ENVIRONMENT>::calculate_cost)
+    .def("comprehend_contacts", &VectorizedEnvironment<ENVIRONMENT>::comprehend_contacts)
     .def(py::pickle(
         [](const VectorizedEnvironment<ENVIRONMENT> &p) { // __getstate__ --> Pickling to Python
             /* Return a tuple that fully encodes the state of the object */

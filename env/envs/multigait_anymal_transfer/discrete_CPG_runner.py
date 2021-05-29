@@ -87,14 +87,14 @@ CPG_actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['CPG_policy_net'
                          ppo_module.MultivariateGaussianDiagonalCovariance(
                              CPG_signal_dim, 0.1, type='CPG'),
                          device)
-CPG_critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['CPG_value_net'], nn.ReLU, 1, 1),
+CPG_critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['CPG_value_net'], nn.LeakyReLU, 1, 1),
                            device)
 
-actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim),
+actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.Tanh, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
                              act_dim, 1.0),  # 1.0
                          device)
-critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, 1),
+critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.Tanh, ob_dim + CPG_signal_dim + CPG_signal_state_dim, 1),
                            device)
 
 saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
@@ -138,8 +138,8 @@ ppo = PPO.PPO(actor=actor,
               )
 
 if mode == 'retrain':
-    # load_param(weight_path, env, CPG_actor, CPG_critic, CPG_ppo.optimizer, saver.data_dir, type='CPG')
-    load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir, type='local')
+    load_param(weight_path, env, CPG_actor, CPG_critic, CPG_ppo.optimizer, saver.data_dir, type='CPG')
+    # load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir, type='local')
 
 """
 [Joint order]
@@ -184,8 +184,8 @@ if mode == 'retrain':
 # t_range = (np.arange(n_steps) * cfg['environment']['control_dt'])[np.newaxis, :]
 target_gait_phase = np.array(target_gait_dict[cfg['environment']['gait']])
 
-for update in range(1000000):
-    
+for update in range(3000):
+    """
     ## Evaluating ##
     if update % cfg['environment']['eval_every_n'] == 0:
         print("Visualizing and evaluating the current policy")
@@ -200,7 +200,7 @@ for update in range(1000000):
             'optimizer_state_dict': ppo.optimizer.state_dict(),
         }, saver.data_dir+"/full_"+str(update)+'.pt')
         # we create another graph just to demonstrate the save/load method
-        CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, 1, CPG_signal_dim)
+        CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.ReLU, 1, CPG_signal_dim)
         CPG_loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['CPG_actor_architecture_state_dict'])
         local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim)
         local_loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['actor_architecture_state_dict'])
@@ -239,8 +239,9 @@ for update in range(1000000):
                 # generate new CPG signal parameter
                 CPG_a_old = CPG_a_new.copy()
                 CPG_b_old = CPG_b_new.copy()
-                CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(normalized_velocity))
-                CPG_signal_period = torch.clamp(torch.relu(CPG_signal_period), min=0.1, max=1.0).cpu().detach().numpy()
+                # CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(normalized_velocity))
+                CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(velocity))
+                CPG_signal_period = torch.relu(CPG_signal_period).cpu().detach().numpy()
 
                 CPG_a_new = 2 * np.pi / (CPG_signal_period + 1e-6)
                 CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old
@@ -260,7 +261,7 @@ for update in range(1000000):
             
             obs = np.concatenate([obs, CPG_signal_period, CPG_phase], axis=1, dtype=np.float32)
             action_ll = local_loaded_graph.architecture(torch.from_numpy(obs))
-            action_ll[:, 0] = torch.relu(action_ll[:, 0])
+            action_ll[:, 0] = torch.clamp(torch.relu(action_ll[:, 0]), min=0.1, max=1.)
             # action_ll[:, 2:] = torch.clamp(action_ll[:, 2:], min=-1.3, max=1.3)
             # action_ll[:, 1:] = torch.clamp(action_ll[:, 1:], min=-1.3, max=1.3)
             action_ll = action_ll.cpu().detach().numpy()
@@ -294,7 +295,7 @@ for update in range(1000000):
         # env.turn_off_visualization()
 
         env.save_scaling(saver.data_dir, str(update))
-
+    """
     ### TRAINING ###
     start = time.time()
     env.reset()
@@ -337,7 +338,8 @@ for update in range(1000000):
             # generate new CPG signal parameter
             CPG_a_old = CPG_a_new.copy()
             CPG_b_old = CPG_b_new.copy()
-            CPG_signal_period = CPG_ppo.observe(normalized_velocity)  # CPG_ppo policy outputs period
+            # CPG_signal_period = CPG_ppo.observe(normalized_velocity)  # CPG_ppo policy outputs period
+            CPG_signal_period = CPG_ppo.observe(velocity)
 
             CPG_a_new = 2 * np.pi / (CPG_signal_period + 1e-6)
             CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old
@@ -387,7 +389,8 @@ for update in range(1000000):
 
         # update CPG rewards in storage
         if (step + 1) % CPG_period == 0:
-            CPG_ppo.step(value_obs=normalized_velocity, rews=CPG_rewards, dones=(1 - CPG_not_dones).astype(bool))
+            # CPG_ppo.step(value_obs=normalized_velocity, rews=CPG_rewards, dones=(1 - CPG_not_dones).astype(bool))
+            CPG_ppo.step(value_obs=velocity, rews=CPG_rewards, dones=(1 - CPG_not_dones).astype(bool))
             
             if (update % 5 == 0) and (1 < cfg['environment']['num_envs']):
                 # CPG_ppo.extra_log(CPG_rewards, update * n_steps + step, type='reward')
@@ -407,8 +410,8 @@ for update in range(1000000):
         
 
     # update CPG policy
-    normalized_velocity = np.zeros(env.num_envs)[:, np.newaxis].astype(np.float32)
-    CPG_ppo.update(actor_obs=normalized_velocity, value_obs=normalized_velocity,
+    velocity = np.zeros(env.num_envs)[:, np.newaxis].astype(np.float32)
+    CPG_ppo.update(actor_obs=velocity, value_obs=velocity,
                    log_this_iteration=update % 10 == 0, update=update)
     CPG_actor.distribution.enforce_minimum_std((torch.ones(CPG_signal_dim)*0.03).to(device))
 
@@ -437,6 +440,8 @@ for update in range(1000000):
                                 FR_calf_joint_history, FL_calf_joint_history, RR_calf_joint_history, RL_calf_joint_history)
 
     end = time.time()
+
+    env.increase_cost_scale()  # curriculum learning
 
     print('----------------------------------------------------')
     print('{:>6}th iteration'.format(update))

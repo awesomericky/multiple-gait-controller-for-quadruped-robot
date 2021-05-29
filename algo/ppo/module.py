@@ -17,7 +17,7 @@ class Actor:
 
     def sample(self, obs, PPO_type):
         if PPO_type == 'CPG':
-            logits = torch.relu(self.architecture.architecture(obs))
+            logits = torch.clamp(torch.relu(self.architecture.architecture(obs)), min=0.1, max=1.)
             actions, log_prob = self.distribution.sample(logits)
 
             ## For real action ##

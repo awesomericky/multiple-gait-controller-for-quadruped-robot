@@ -53,6 +53,8 @@ class RaisimGymEnv {
   virtual void contact_logging(Eigen::Ref<EigenVec> contacts) = 0;
   virtual void set_target_velocity(Eigen::Ref<EigenVec> velocity) = 0;
   virtual void get_CPG_reward(Eigen::Ref<EigenVec> CPG_reward) = 0;
+  virtual void calculate_cost() = 0;
+  virtual void comprehend_contacts() = 0;
   ////////////////////////////////
 
   void setSimulationTimeStep(double dt) { simulation_dt_ = dt; world_->setTimeStep(dt); }
