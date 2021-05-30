@@ -12,7 +12,7 @@ environment:
   control_dt: 0.01
   velocity_sampling_dt: 3.0
   max_time: 6.0
-  n_reward: 11
+  n_reward: 12
   CPG_reward:
     forwardVel_difference:
       coeff: 1. # not matter
@@ -37,14 +37,16 @@ environment:
       coeff: 1.
     orientation:
       coeff: 1.
+    leg_phase:
+      coeff: 1.
     height:
       threshold: 0.07 # penalty only given if the height is out of threhold
       coeff: 0.0 #0.3
   velocity:
-    min: 0.5
-    max: 3.5
-  gait: 'bound'
-  single_velocity: True
+    min: 0.0
+    max: 1.0
+  gait: 'pace'
+  single_velocity: False
 
 architecture:
   policy_net: [128, 128]

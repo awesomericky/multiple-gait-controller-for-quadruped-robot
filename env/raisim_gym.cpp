@@ -44,6 +44,7 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def("increase_cost_scale", &VectorizedEnvironment<ENVIRONMENT>::increase_cost_scale)
     .def("calculate_cost", &VectorizedEnvironment<ENVIRONMENT>::calculate_cost)
     .def("comprehend_contacts", &VectorizedEnvironment<ENVIRONMENT>::comprehend_contacts)
+    .def("set_leg_phase", &VectorizedEnvironment<ENVIRONMENT>::set_leg_phase)
     .def(py::pickle(
         [](const VectorizedEnvironment<ENVIRONMENT> &p) { // __getstate__ --> Pickling to Python
             /* Return a tuple that fully encodes the state of the object */

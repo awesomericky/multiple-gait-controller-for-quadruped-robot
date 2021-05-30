@@ -119,6 +119,9 @@ class RaisimGymVecEnv:
     
     def increase_cost_scale(self):
         self.wrapper.increase_cost_scale()
+    
+    def set_leg_phase(self, leg_phase):
+        self.wrapper.set_leg_phase(leg_phase)
 
     @property
     def num_envs(self):

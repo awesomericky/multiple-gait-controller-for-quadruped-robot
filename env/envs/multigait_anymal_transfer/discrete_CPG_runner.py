@@ -31,6 +31,16 @@ def sin(x, a, b):
 def sin_derivatice(x, a, b):
     return a * np.cos(a*x + b)
 
+def compute_phase(previous_CPG, current_CPG):
+    """
+    previous_CPG: (env.num_envs, 4)
+    current_CPG: (env.num_envs, 4)
+
+    if current_CPG - previous_CPG < 0 ==> swing phase (= 0)
+    elif current_CPG - previous_CPG >= 0 ==> stance phase (= 1)
+    """
+    return np.where(current_CPG - previous_CPG >= 0, 1, 0).astype(np.float32)
+
 # task specification
 task_name = "single_CPG_w_velocity_change"
 
@@ -184,7 +194,7 @@ if mode == 'retrain':
 # t_range = (np.arange(n_steps) * cfg['environment']['control_dt'])[np.newaxis, :]
 target_gait_phase = np.array(target_gait_dict[cfg['environment']['gait']])
 
-for update in range(10000):
+for update in range(3000):
     
     ## Evaluating ##
     if update % cfg['environment']['eval_every_n'] == 0:
@@ -222,7 +232,7 @@ for update in range(10000):
         CPG_signal_period_traj = np.zeros((n_steps*2, ), dtype=np.float32)
         target_velocity_traj = np.zeros((n_steps*2, ), dtype=np.float32)
         real_velocity_traj = np.zeros((n_steps*2, ), dtype=np.float32)
-
+        
         for step in range(n_steps*2):
             frame_start = time.time()
 
@@ -380,6 +390,12 @@ for update in range(10000):
         env_action[:, [1, 3, 5, 7]] = action[:, 1:]
 
         reward, dones = env.step(env_action)
+
+        if step > 0:
+            # set leg phase to compute reward corresponding to gait contact pattern
+            leg_phase = compute_phase(previous_CPG=CPG_signal[:, :, step-1], current_CPG=CPG_signal[:, :, step])
+            env.set_leg_phase(leg_phase)
+
         env.get_CPG_reward()
         temp_CPG_rewards = env._CPG_reward
         CPG_rewards += (temp_CPG_rewards * (1 - dones))[:, np.newaxis]

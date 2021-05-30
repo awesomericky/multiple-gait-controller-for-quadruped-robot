@@ -179,6 +179,7 @@ namespace raisim
             rewards_.record("joint_vel", -velLimitCost);
             rewards_.record("previous_action_smooth", -previousActionCost);
             rewards_.record("orientation", -orientationCost);
+            rewards_.record("leg_phase", -leg_phase_cost);
             rewards_.record("height", std::exp(height_violation));
 
             CPG_rewards_ = linvelCost + torqueCost;
@@ -190,7 +191,7 @@ namespace raisim
 
         void reward_logging(Eigen::Ref<EigenVec> rewards) final
         {
-            reward_log.setZero(11);  ///////// Need to change!! Don't forget!! /////////////
+            reward_log.setZero(12);  ///////// Need to change!! Don't forget!! /////////////
             reward_log[0] = -torqueCost;
             reward_log[1] = -linvelCost;
             reward_log[2] = -angVelCost;
@@ -200,8 +201,9 @@ namespace raisim
             reward_log[6] = -velLimitCost;
             reward_log[7] = -previousActionCost;
             reward_log[8] = -orientationCost;
-            reward_log[9] = std::exp(-height_violation);
-            reward_log[10] = costScale_;
+            reward_log[9] = -leg_phase_cost;
+            reward_log[10] = std::exp(-height_violation);
+            reward_log[11] = costScale_;
 
             rewards = reward_log.cast<float>();
         }
@@ -325,9 +327,12 @@ namespace raisim
 
         void calculate_cost()
         {
+            torqueCost=0, linvelCost=0, angVelCost=0, velLimitCost = 0, footClearanceCost = 0, slipCost = 0;
+            leg_phase_cost=0, desiredHeightCost=0, previousActionCost = 0, orientationCost = 0, footVelCost = 0;
+
             double yawRateError = (gv_[5] - 0) * (gv_[5] - 0) * (4.0 + costScale_ * 5);
 
-            torqueCost = costScale_ * 0.05 * torque.tail(8).norm() * simulation_dt_;
+            torqueCost = costScale_ * 0.5 * torque.tail(8).norm() * simulation_dt_;
 
             // const double velErr = std::max((4.0 + costScale_ * 5) * (desired_velocity - bodyLinearVel_[0]), 0.0);
             const double velErr = std::abs(desired_velocity - bodyLinearVel_[0]);
@@ -344,26 +349,45 @@ namespace raisim
 
             for (int i = 6; i < 14; i++)
                 if (fabs(gv_(i)) > velLim)
-                    velLimitCost += costScale_ * 0.2e-4 / std::min(std::max(2.5 * desired_velocity - 4, 0.1), 1.0) * std::fabs(gv_[i]) * simulation_dt_;
+                    velLimitCost += costScale_ * 0.02 / std::min(std::max(2.5 * desired_velocity - 4, 0.1), 1.0) * std::fabs(gv_[i]) * simulation_dt_;
 
-            for (int i = 0; i < 4; i++)
-                footVelCost += costScale_ * 1e-5 / std::min(std::max(2.5 * desired_velocity - 4, 0.1), 1.0) * footVel_W[i][2] * footVel_W[i][2] * simulation_dt_;
-
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 4; i++) 
             {
-                if (!footContactState_[i])
-                    footClearanceCost += costScale_ * 0.15 * pow(std::max(0.0, 0.07 - footPos_W[i][2]), 2) * footVel_W[i].e().head(2).norm() * simulation_dt_;
-                else
-                    slipCost += 0.01 * (costScale_ * (0.2 * footContactVel_[i].head(2).norm())) * simulation_dt_;
+                footVelCost += costScale_ * 1. / std::min(std::max(2.5 * desired_velocity - 4, 0.1), 1.0) * footVel_W[i][2] * footVel_W[i][2] * simulation_dt_;
+
+                if (!footContactState_[i]) {
+                    // not in contact
+                    footClearanceCost += costScale_ * 15000 * pow(std::max(0.0, 0.07 - footPos_W[i][2]), 2) * footVel_W[i].e().head(2).norm() * simulation_dt_;
+                    if (current_leg_phase[i] == 0)
+                        // currently in swing phase ==> should not be in contact (increase reward = decrease cost)
+                        leg_phase_cost -= 1;
+                }
+                else{
+                    // in contact
+                    slipCost += 1000 * (costScale_ * (0.2 * footContactVel_[i].head(2).norm())) * simulation_dt_;
+                    if (current_leg_phase[i] == 1)
+                        // currently in stance phase ==> should be in contact (increase reward = decrease cost)
+                        leg_phase_cost -= 1;
+                }
             }
+
+            leg_phase_cost /= 4.;
+            leg_phase_cost = leg_phase_cost * simulation_dt_ * 100;
 
             previousActionCost = 0.5 * costScale_ * (previous_action - current_action).norm() * simulation_dt_;
 
             Eigen::Vector3d identityRot(0,0,1);
-            orientationCost = costScale_ * 1.0 * (pitch_and_yaw - identityRot).norm() * simulation_dt_;
+            orientationCost = costScale_ * 100.0 * (pitch_and_yaw - identityRot).norm() * simulation_dt_;
 
-            cost = torqueCost + linvelCost + angVelCost + footClearanceCost + velLimitCost + slipCost + previousActionCost + orientationCost + footVelCost; //  ;
+            // cost = torqueCost + linvelCost + angVelCost + footClearanceCost + velLimitCost + slipCost + previousActionCost + orientationCost + footVelCost + leg_phase_cost; //  ;
 
+        }
+
+        void set_leg_phase(Eigen::Ref<EigenVec> leg_phase) final
+        {
+            for (int i=0; i<4; i++){
+                current_leg_phase[i] = leg_phase[i];
+            }
         }
 
         bool isTerminalState(float &terminalReward) final
@@ -403,7 +427,7 @@ namespace raisim
         std::vector<raisim::Vec<3>> footVel_W;
         std::vector<Eigen::Vector3d> footContactVel_;
 
-        Eigen::Vector4d foot_idx;
+        Eigen::Vector4d foot_idx, current_leg_phase;
 
         size_t numContact_;
         size_t numFootContact_;
@@ -418,6 +442,10 @@ namespace raisim
         double cost;
         Eigen::VectorXd previous_action, current_action;
 
-        double torqueCost=0, linvelCost=0, angVelCost=0, velLimitCost = 0, footClearanceCost = 0, slipCost = 0, desiredHeightCost=0, previousActionCost = 0, orientationCost = 0, footVelCost = 0;
+        double torqueCost=0, linvelCost=0, angVelCost=0, velLimitCost = 0, footClearanceCost = 0, slipCost = 0, desiredHeightCost=0, previousActionCost = 0, orientationCost = 0, footVelCost = 0, leg_phase_cost=0;
+
     };
+    // // Logging example
+    // Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
+    // std::cout << current_leg_phase.format(CommaInitFmt) << std::endl;
 }

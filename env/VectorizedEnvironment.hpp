@@ -120,6 +120,12 @@ class VectorizedEnvironment {
       environments_[i]->get_CPG_reward(CPG_reward.row(i));
   }
 
+  void set_leg_phase(Eigen::Ref<EigenRowMajorMat> &leg_phase) {
+#pragma omp parallel for
+    for (int i = 0; i < num_envs_; i++)
+      environments_[i]->set_leg_phase(leg_phase.row(i));
+  }
+
   void turnOnVisualization() { if(render_) environments_[0]->turnOnVisualization(); }
   void turnOffVisualization() { if(render_) environments_[0]->turnOffVisualization(); }
   void startRecordingVideo(const std::string& videoName) { if(render_) environments_[0]->startRecordingVideo(videoName); }

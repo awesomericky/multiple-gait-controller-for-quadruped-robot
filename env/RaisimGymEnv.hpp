@@ -55,6 +55,7 @@ class RaisimGymEnv {
   virtual void get_CPG_reward(Eigen::Ref<EigenVec> CPG_reward) = 0;
   virtual void calculate_cost() = 0;
   virtual void comprehend_contacts() = 0;
+  virtual void set_leg_phase(Eigen::Ref<EigenVec> leg_phase) = 0;
   ////////////////////////////////
 
   void setSimulationTimeStep(double dt) { simulation_dt_ = dt; world_->setTimeStep(dt); }

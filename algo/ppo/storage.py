@@ -72,7 +72,7 @@ class RolloutStorage:
         elif self.reward_normalize_type == 1:
             # normalize 1 (normalize total)
             self.rewards -= torch.mean(self.rewards)
-            self.rewards /= torch.std(self.rewards)
+            self.rewards /= torch.std(self.rewards + 1e-6)
         elif self.reward_normalize_type == 2:
             # normalize 2 (normalize for each env data) ==> layer normalization
             self.rewards -= torch.mean(self.rewards, axis=0).unsqueeze(0)
