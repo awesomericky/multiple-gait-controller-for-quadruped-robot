@@ -329,37 +329,38 @@ namespace raisim
 
             torqueCost = costScale_ * 0.05 * torque.tail(8).norm() * simulation_dt_;
 
-            const double velErr = std::max((4.0 + costScale_ * 5) * (desired_velocity - bodyLinearVel_[0]), 0.0);
+            // const double velErr = std::max((4.0 + costScale_ * 5) * (desired_velocity - bodyLinearVel_[0]), 0.0);
+            const double velErr = std::abs(desired_velocity - bodyLinearVel_[0]);
 
-            linvelCost = -10.0 * simulation_dt_ / (exp(velErr) + 2.0 + exp(-velErr));
+            linvelCost = -500.0 * simulation_dt_ / (exp(velErr) + 2.0 + exp(-velErr)); // ==> min -0.25
 
-            angVelCost = -6.0 * simulation_dt_ / (exp(yawRateError) + 2.0 + exp(-yawRateError));
+            angVelCost = -120.0 * simulation_dt_ / (exp(yawRateError) + 2.0 + exp(-yawRateError)); // ==> min -0.15
             // angVelCost += costScale_ * std::min(0.25 * u_.segment<2>(3).squaredNorm() * simulation_dt_, 0.002) / std::min(0.3 + 3.0 * commandNorm, 1.0);
 
             double velLim = 0.0;
-            for (int i = 6; i < 14; i++)
-                if (fabs(gv_(i)) > velLim)
-                    velLimitCost += costScale_ * 0.3e-2 / std::min(0.09 + 2.5 * desired_velocity, 1.0) * (std::fabs(gv_[i]) - velLim) * (std::fabs(gv_[i]) - velLim) * simulation_dt_;
+            // for (int i = 6; i < 14; i++)
+            //     if (fabs(gv_(i)) > velLim)
+            //         velLimitCost += costScale_ * 0.3e-2 / std::min(0.09 + 2.5 * desired_velocity, 1.0) * (std::fabs(gv_[i]) - velLim) * (std::fabs(gv_[i]) - velLim) * simulation_dt_;
 
             for (int i = 6; i < 14; i++)
                 if (fabs(gv_(i)) > velLim)
-                    velLimitCost += costScale_ * 0.2e-2 / std::min(0.09 + 2.5 * desired_velocity, 1.0) * std::fabs(gv_[i]) * simulation_dt_;
+                    velLimitCost += costScale_ * 0.2e-4 / std::min(std::max(2.5 * desired_velocity - 4, 0.1), 1.0) * std::fabs(gv_[i]) * simulation_dt_;
 
             for (int i = 0; i < 4; i++)
-                footVelCost += costScale_ * 1e-1 / std::min(0.25 + 3.0 * desired_velocity, 1.0) * footVel_W[i][2] * footVel_W[i][2] * simulation_dt_;
+                footVelCost += costScale_ * 1e-5 / std::min(std::max(2.5 * desired_velocity - 4, 0.1), 1.0) * footVel_W[i][2] * footVel_W[i][2] * simulation_dt_;
 
             for (int i = 0; i < 4; i++)
             {
                 if (!footContactState_[i])
-                    footClearanceCost += costScale_ * 15.0 * pow(std::max(0.0, 0.07 - footPos_W[i][2]), 2) * footVel_W[i].e().head(2).norm() * simulation_dt_;
+                    footClearanceCost += costScale_ * 0.15 * pow(std::max(0.0, 0.07 - footPos_W[i][2]), 2) * footVel_W[i].e().head(2).norm() * simulation_dt_;
                 else
-                    slipCost += (costScale_ * (2.0 * footContactVel_[i].head(2).norm())) * simulation_dt_;
+                    slipCost += 0.01 * (costScale_ * (0.2 * footContactVel_[i].head(2).norm())) * simulation_dt_;
             }
 
             previousActionCost = 0.5 * costScale_ * (previous_action - current_action).norm() * simulation_dt_;
 
             Eigen::Vector3d identityRot(0,0,1);
-            orientationCost = costScale_ * 0.4 * (pitch_and_yaw - identityRot).norm() * simulation_dt_;
+            orientationCost = costScale_ * 1.0 * (pitch_and_yaw - identityRot).norm() * simulation_dt_;
 
             cost = torqueCost + linvelCost + angVelCost + footClearanceCost + velLimitCost + slipCost + previousActionCost + orientationCost + footVelCost; //  ;
 

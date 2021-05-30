@@ -83,18 +83,18 @@ max_vel = cfg['environment']['velocity']['max']
 
 avg_rewards = []
 
-CPG_actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.ReLU, 1, CPG_signal_dim),
+CPG_actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, 1, CPG_signal_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
                              CPG_signal_dim, 0.1, type='CPG'),
                          device)
 CPG_critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['CPG_value_net'], nn.LeakyReLU, 1, 1),
                            device)
 
-actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.Tanh, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim),
+actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
                              act_dim, 1.0),  # 1.0
                          device)
-critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.Tanh, ob_dim + CPG_signal_dim + CPG_signal_state_dim, 1),
+critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, 1),
                            device)
 
 saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
@@ -184,8 +184,8 @@ if mode == 'retrain':
 # t_range = (np.arange(n_steps) * cfg['environment']['control_dt'])[np.newaxis, :]
 target_gait_phase = np.array(target_gait_dict[cfg['environment']['gait']])
 
-for update in range(3000):
-    """
+for update in range(10000):
+    
     ## Evaluating ##
     if update % cfg['environment']['eval_every_n'] == 0:
         print("Visualizing and evaluating the current policy")
@@ -200,13 +200,14 @@ for update in range(3000):
             'optimizer_state_dict': ppo.optimizer.state_dict(),
         }, saver.data_dir+"/full_"+str(update)+'.pt')
         # we create another graph just to demonstrate the save/load method
-        CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.ReLU, 1, CPG_signal_dim)
+        CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, 1, CPG_signal_dim)
         CPG_loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['CPG_actor_architecture_state_dict'])
         local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim)
         local_loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['actor_architecture_state_dict'])
 
+        env.reset()
         # env.turn_on_visualization()
-        env.start_video_recording(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "policy_"+str(update)+'.mp4')
+        # env.start_video_recording(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "policy_"+str(update)+'.mp4')
 
         # initialize value
         CPG_a_new = np.zeros((env.num_envs, 1))
@@ -291,11 +292,11 @@ for update in range(3000):
         contact_plotting(update, contact_log)
         CPG_and_velocity_plotting(update, n_steps*2, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
 
-        env.stop_video_recording()
+        # env.stop_video_recording()
         # env.turn_off_visualization()
 
         env.save_scaling(saver.data_dir, str(update))
-    """
+    
     ### TRAINING ###
     start = time.time()
     env.reset()
@@ -441,7 +442,7 @@ for update in range(3000):
 
     end = time.time()
 
-    env.increase_cost_scale()  # curriculum learning
+    # env.increase_cost_scale()  # curriculum learning
 
     print('----------------------------------------------------')
     print('{:>6}th iteration'.format(update))
