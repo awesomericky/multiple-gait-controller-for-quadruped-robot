@@ -50,7 +50,7 @@ max_vel = cfg['environment']['velocity']['max']
 
 CPG_period = int(cfg['environment']['CPG_control_dt'] / cfg['environment']['control_dt'])  # 5
 # velocity_period = int(cfg['environment']['velocity_sampling_dt'] / cfg['environment']['control_dt'])  # 200
-velocity_period = 1000
+velocity_period = 300  # sample velocity every 3 sec
 
 target_gait_dict = {'pace': [np.pi, 0, np.pi, 0], 'trot': [np.pi, 0, 0, np.pi], 'bound': [np.pi, np.pi, 0, 0]}
 target_gait_phase = np.array(target_gait_dict[cfg['environment']['gait']])
@@ -70,7 +70,7 @@ else:
     start_step_id = 0
 
     print("Visualizing and evaluating the policy: ", weight_path)
-    CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], torch.nn.ReLU, 1, CPG_signal_dim)
+    CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], torch.nn.LeakyReLU, 1, CPG_signal_dim)
     CPG_loaded_graph.load_state_dict(torch.load(weight_path)['CPG_actor_architecture_state_dict'])
     local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], torch.nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim)
     local_loaded_graph.load_state_dict(torch.load(weight_path)['actor_architecture_state_dict'])
@@ -79,7 +79,10 @@ else:
     env.turn_on_visualization()
 
     # max_steps = 1000000
-    max_steps = 3000 ## 10 secs
+    max_steps = 1500 ## 12 secs
+
+    assert max_steps / velocity_period == 5.0, "Check velocity period"
+    count = 0
 
     # initialize value
     CPG_a_new = np.zeros((training_num_envs, 1))
@@ -101,26 +104,28 @@ else:
         if step % CPG_period == 0:
             if step % velocity_period == 0:
                 # sample new velocity
-                if cfg['environment']['single_velocity']:
-                    # normalized_velocity = np.broadcast_to(np.random.uniform(low = 0, high=1, size=1)[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                # normalized_velocity = np.broadcast_to(np.random.uniform(low = 0, high=1, size=1)[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                # normalized_velocity = np.broadcast_to(np.array([0])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                if count == 0:
                     normalized_velocity = np.broadcast_to(np.array([0])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
-                    # if step == 0:
-                    #     normalized_velocity = np.broadcast_to(np.array([0])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
-                    # elif step == 1000:
-                    #     normalized_velocity = np.broadcast_to(np.array([0.5])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
-                    # elif step == 2000:
-                    #     normalized_velocity = np.broadcast_to(np.array([1])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                elif count == 1:
+                    normalized_velocity = np.broadcast_to(np.array([0.25])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                elif count == 2:
+                    normalized_velocity = np.broadcast_to(np.array([0.5])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                elif count == 3:
+                    normalized_velocity = np.broadcast_to(np.array([0.75])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
                 else:
-                    normalized_velocity = np.random.uniform(low = 0, high=1, size=training_num_envs)[:, np.newaxis].astype(np.float32)
+                    normalized_velocity = np.broadcast_to(np.array([1])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
                 velocity = normalized_velocity * (max_vel - min_vel) + min_vel
 
                 env.set_target_velocity(velocity)
+                count += 1
             
             # generate new CPG signal parameter
             CPG_a_old = CPG_a_new.copy()
             CPG_b_old = CPG_b_new.copy()
-            CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(normalized_velocity))
-            CPG_signal_period = torch.clamp(torch.relu(CPG_signal_period), min=0.1, max=1.0).cpu().detach().numpy()
+            CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(velocity))
+            CPG_signal_period = torch.clamp(CPG_signal_period, min=0.1, max=1.0).cpu().detach().numpy()
 
             CPG_a_new = 2 * np.pi / (CPG_signal_period + 1e-6)
             CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old
