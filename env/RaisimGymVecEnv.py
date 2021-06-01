@@ -91,6 +91,10 @@ class RaisimGymVecEnv:
     def reset(self):
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
         self.wrapper.reset()
+    
+    def reset_w_previous(self):
+        self._reward = np.zeros(self.num_envs, dtype=np.float32)
+        self.wrapper.reset_w_previous()
 
     def _normalize_observation(self, obs):
         if self.normalize_ob:
@@ -122,6 +126,9 @@ class RaisimGymVecEnv:
     
     def set_leg_phase(self, leg_phase):
         self.wrapper.set_leg_phase(leg_phase)
+    
+    def set_next_initialize_steps(self, next_initialize_steps):
+        self.wrapper.set_next_initialize_steps(next_initialize_steps)
 
     @property
     def num_envs(self):

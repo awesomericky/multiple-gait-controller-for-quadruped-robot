@@ -12,7 +12,7 @@
 
 // To make new function
 // 1. Environment.hpp
-// 2. raisim_gym.cpp
+// 2. raisim_gym.cpp (if needed)
 // 3. RaisimGymEnv.hpp
 // 4. VectorizedEnvironment.hpp
 // 5. RaisimGymVecEnv.py (if needed)
@@ -42,6 +42,7 @@ namespace raisim
             /// initialize containers
             gc_.setZero(gcDim_);
             gc_init_.setZero(gcDim_);
+            next_gc_init_.setZero(gcDim_);
             gv_.setZero(gvDim_);
             gv_init_.setZero(gvDim_);
             pTarget_.setZero(gcDim_);
@@ -84,6 +85,7 @@ namespace raisim
 
             // nominal configuration of laikago
             gc_init_ << 0, 0, 0.46, 1, 0.0, 0.0, 0.0, 0.5, -1, 0.5, -1, 0.5, -1, 0.5, -1;
+            update_initial_state(gc_init_);
 
             /// set pd gains
             Eigen::VectorXd jointPgain(gvDim_), jointDgain(gvDim_);
@@ -134,6 +136,15 @@ namespace raisim
 
         }
 
+        void reset_w_previous() final
+        {
+            anymal_->setState(next_gc_init_, gv_init_);
+
+            current_n_state = 0;
+
+            updateObservation();
+        }
+
         float step(const Eigen::Ref<EigenVec> &action) final
         {
             /// action scaling
@@ -182,7 +193,7 @@ namespace raisim
             rewards_.record("leg_phase", -leg_phase_cost);
             rewards_.record("height", std::exp(height_violation));
 
-            CPG_rewards_ = linvelCost + torqueCost;
+            CPG_rewards_ = -cost;
 
             previous_action = action.cast<double>();
 
@@ -218,7 +229,7 @@ namespace raisim
             desired_velocity = velocity[0];
         }
 
-        void get_CPG_reward(Eigen::Ref<EigenVec> CPG_reward) final
+        void get_CPG_reward(Eigen::Ref<EigenVec> CPG_reward) 
         {
             CPG_reward[0] = CPG_rewards_;
         }
@@ -247,6 +258,10 @@ namespace raisim
             GRF_impulse.setZero(4);
 
             comprehend_contacts();
+
+            if (current_n_state == next_initialize_n_state)
+                update_initial_state(gc_);
+            current_n_state += 1;
 
         }
 
@@ -379,15 +394,25 @@ namespace raisim
             Eigen::Vector3d identityRot(0,0,1);
             orientationCost = costScale_ * 100.0 * (pitch_and_yaw - identityRot).norm() * simulation_dt_;
 
-            // cost = torqueCost + linvelCost + angVelCost + footClearanceCost + velLimitCost + slipCost + previousActionCost + orientationCost + footVelCost + leg_phase_cost; //  ;
+            cost = torqueCost + linvelCost + angVelCost + footClearanceCost + velLimitCost + slipCost + previousActionCost + orientationCost + footVelCost + leg_phase_cost; //  ;
 
         }
 
-        void set_leg_phase(Eigen::Ref<EigenVec> leg_phase) final
+        void set_leg_phase(Eigen::Ref<EigenVec> leg_phase) 
         {
             for (int i=0; i<4; i++){
                 current_leg_phase[i] = leg_phase[i];
             }
+        }
+
+        void set_next_initialize_steps(int next_initialize_steps) 
+        {
+            next_initialize_n_state = next_initialize_steps;
+        }
+
+        void update_initial_state(Eigen::VectorXd current_state)
+        {
+            next_gc_init_ = current_state;
         }
 
         bool isTerminalState(float &terminalReward) final
@@ -443,6 +468,10 @@ namespace raisim
         Eigen::VectorXd previous_action, current_action;
 
         double torqueCost=0, linvelCost=0, angVelCost=0, velLimitCost = 0, footClearanceCost = 0, slipCost = 0, desiredHeightCost=0, previousActionCost = 0, orientationCost = 0, footVelCost = 0, leg_phase_cost=0;
+
+        int next_initialize_n_state=0, current_n_state=0;
+        Eigen::VectorXd next_gc_init_; 
+        // initialize with states in previous trajectory. If the trajectory finishes during the episode, it is initialized w/ gc_init_, not next_gc_init_
 
     };
     // // Logging example

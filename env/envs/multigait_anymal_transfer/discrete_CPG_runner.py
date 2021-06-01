@@ -84,7 +84,7 @@ n_steps = math.floor(cfg['environment']['max_time'] /
 total_CPG_steps = n_CPG_steps * env.num_envs
 total_steps = n_steps * env.num_envs
 CPG_period = int(cfg['environment']['CPG_control_dt'] / cfg['environment']['control_dt'])  # 5
-velocity_period = int(cfg['environment']['velocity_sampling_dt'] / cfg['environment']['control_dt'])  # 200
+velocity_period = int(cfg['environment']['velocity_sampling_dt'] / cfg['environment']['control_dt'])  # 400
 
 assert velocity_period % CPG_period == 0, "velocity_sampling_dt should be integer multiple of CPG_control_dt"
 
@@ -149,7 +149,7 @@ ppo = PPO.PPO(actor=actor,
 
 if mode == 'retrain':
     load_param(weight_path, env, CPG_actor, CPG_critic, CPG_ppo.optimizer, saver.data_dir, type='CPG')
-    # load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir, type='local')
+    load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir, type='local')
 
 """
 [Joint order]
@@ -193,8 +193,14 @@ if mode == 'retrain':
 
 # t_range = (np.arange(n_steps) * cfg['environment']['control_dt'])[np.newaxis, :]
 target_gait_phase = np.array(target_gait_dict[cfg['environment']['gait']])
+evaluate_n_steps = n_steps * 3
 
-for update in range(3000):
+# needed for initializing w/ random state in previous trajectory
+CPG_a_previous_traj = np.zeros((env.num_envs, 1))
+CPG_b_previous_traj = np.broadcast_to(target_gait_phase[:, np.newaxis], (env.num_envs, 4, 1))
+intermediate_time = np.zeros((env.num_envs, 1))
+
+for update in range(4000):
     
     ## Evaluating ##
     if update % cfg['environment']['eval_every_n'] == 0:
@@ -224,20 +230,20 @@ for update in range(3000):
         CPG_b_new = np.broadcast_to(target_gait_phase[:, np.newaxis], (env.num_envs, 4, 1))
         CPG_a_old = np.zeros((env.num_envs, 1))
         CPG_b_old = np.broadcast_to(target_gait_phase[:, np.newaxis], (env.num_envs, 4, 1))
-        CPG_signal = np.zeros((env.num_envs, 4, n_steps * 2), dtype=np.float32)
+        CPG_signal = np.zeros((env.num_envs, 4, evaluate_n_steps), dtype=np.float32)
         env_action = np.zeros((env.num_envs, 8), dtype=np.float32)
 
         # initialize logging value
-        contact_log = np.zeros((4, n_steps*2), dtype=np.float32) # 0: FR, 1: FL, 2: RR, 3:RL
-        CPG_signal_period_traj = np.zeros((n_steps*2, ), dtype=np.float32)
-        target_velocity_traj = np.zeros((n_steps*2, ), dtype=np.float32)
-        real_velocity_traj = np.zeros((n_steps*2, ), dtype=np.float32)
+        contact_log = np.zeros((4, evaluate_n_steps), dtype=np.float32) # 0: FR, 1: FL, 2: RR, 3:RL
+        CPG_signal_period_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
+        target_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
+        real_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
         
-        for step in range(n_steps*2):
+        for step in range(evaluate_n_steps):
             frame_start = time.time()
 
             if step % CPG_period == 0:
-                if step % velocity_period == 0:
+                if step % 300 == 0:  # sample velocity every 3 seconds
                     # sample new velocity
                     if cfg['environment']['single_velocity']:
                         normalized_velocity = np.broadcast_to(np.random.uniform(low = 0, high=1, size=1)[:, np.newaxis], (env.num_envs, 1)).astype(np.float32)
@@ -252,7 +258,7 @@ for update in range(3000):
                 CPG_b_old = CPG_b_new.copy()
                 # CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(normalized_velocity))
                 CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(velocity))
-                CPG_signal_period = torch.relu(CPG_signal_period).cpu().detach().numpy()
+                CPG_signal_period = torch.clamp(CPG_signal_period, min=0.1, max=1.).cpu().detach().numpy()
 
                 CPG_a_new = 2 * np.pi / (CPG_signal_period + 1e-6)
                 CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old
@@ -272,7 +278,7 @@ for update in range(3000):
             
             obs = np.concatenate([obs, CPG_signal_period, CPG_phase], axis=1, dtype=np.float32)
             action_ll = local_loaded_graph.architecture(torch.from_numpy(obs))
-            action_ll[:, 0] = torch.clamp(torch.relu(action_ll[:, 0]), min=0.1, max=1.)
+            action_ll[:, 0] = torch.relu(action_ll[:, 0])
             # action_ll[:, 2:] = torch.clamp(action_ll[:, 2:], min=-1.3, max=1.3)
             # action_ll[:, 1:] = torch.clamp(action_ll[:, 1:], min=-1.3, max=1.3)
             action_ll = action_ll.cpu().detach().numpy()
@@ -300,7 +306,7 @@ for update in range(3000):
         # save & plot contact log
         np.savez_compressed(f'contact_plot/contact_{update}.npz', contact=contact_log)
         contact_plotting(update, contact_log)
-        CPG_and_velocity_plotting(update, n_steps*2, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
+        CPG_and_velocity_plotting(update, evaluate_n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
 
         # env.stop_video_recording()
         # env.turn_off_visualization()
@@ -308,8 +314,11 @@ for update in range(3000):
         env.save_scaling(saver.data_dir, str(update))
     
     ### TRAINING ###
+    next_initialize_steps = np.random.choice(n_steps+1, env.num_envs, replace=True).astype(int)  # number of states in one trajectory is (n_steps + 1)
+    env.set_next_initialize_steps(next_initialize_steps)
+
     start = time.time()
-    env.reset()
+    env.reset_w_previous()
 
     reward_CPG_sum = 0
     reward_local_sum = 0
@@ -347,25 +356,44 @@ for update in range(3000):
                 env.set_target_velocity(velocity)
             
             # generate new CPG signal parameter
-            CPG_a_old = CPG_a_new.copy()
-            CPG_b_old = CPG_b_new.copy()
+            if step == 0:
+                CPG_a_old = CPG_a_previous_traj.copy()
+                CPG_b_old = CPG_b_previous_traj.copy()
+
+                # reset CPG in previous trajectory
+                CPG_a_previous_traj = np.zeros((env.num_envs, 1))
+                CPG_b_previous_traj = np.zeros((env.num_envs, 4, 1))
+            else:
+                CPG_a_old = CPG_a_new.copy()
+                CPG_b_old = CPG_b_new.copy()
             # CPG_signal_period = CPG_ppo.observe(normalized_velocity)  # CPG_ppo policy outputs period
             CPG_signal_period = CPG_ppo.observe(velocity)
 
-            CPG_a_new = 2 * np.pi / (CPG_signal_period + 1e-6)
-            CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old
+            CPG_a_new = 2 * np.pi / CPG_signal_period
+            CPG_b_new = ((CPG_a_old - CPG_a_new) * (intermediate_time + (step * cfg['environment']['control_dt'])))[:, np.newaxis, :] + CPG_b_old
 
             # generate CPG signal
             t_period = CPG_period + 1 if (step == n_steps - CPG_period) else CPG_period
-            t_range = (np.arange(step, step + t_period) * cfg['environment']['control_dt'])[np.newaxis, np.newaxis, :]
+            t_range = (np.arange(step, step + t_period) * cfg['environment']['control_dt'])[np.newaxis, :] + intermediate_time
+            t_range = t_range[:, np.newaxis, :]
             CPG_signal[:, :, step:step + t_period] = sin(t_range, CPG_a_new[:, :, np.newaxis], CPG_b_new)
             # CPG_signal & CPG_signal_derivative dimension change is as following
             # (1, 1, CPG_period) (n_env, 1, 1) (n_env, 4, 1)  ==> (n_env, 4, CPG_period)
-            
+
+            # prepare for next update initialization
+            previous_traj_state = np.where(step <= next_initialize_steps, 1, 0) * np.where(next_initialize_steps < step + t_period, 1, 0)
+            CPG_a_previous_traj += previous_traj_state[:, np.newaxis] * CPG_a_new
+            CPG_b_previous_traj += previous_traj_state[:, np.newaxis, np.newaxis] * CPG_b_new
+        
+        # set leg phase to compute reward corresponding to gait contact pattern
+        if step > 0:
+            leg_phase = compute_phase(previous_CPG=CPG_signal[:, :, step-1], current_CPG=CPG_signal[:, :, step])
+            env.set_leg_phase(leg_phase)
+        
         obs, non_obs = env.observe_logging()
         
-        CPG_phase = ((step * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :]) \
-                    - (((step * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :])).astype(int)
+        CPG_phase = ((intermediate_time + (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :]) \
+                    - (((intermediate_time + (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :])).astype(int)
         CPG_phase = np.squeeze(CPG_phase)
         assert (0 <= CPG_phase).all() and (CPG_phase <= 1).all(), "CPG_phase not in correct range"
         
@@ -384,17 +412,10 @@ for update in range(3000):
             RL_calf_joint_history[step] = non_obs[0,11]
 
         # Architecture 5
-        # env_action[:, [0, 2, 4, 6]] = action[:, 0][:, np.newaxis] * CPG_signal[:, :, step] + action[:, 1][:, np.newaxis]
         env_action[:, [0, 2, 4, 6]] = action[:, 0][:, np.newaxis] * CPG_signal[:, :, step]
-        # env_action[:, [1, 3, 5, 7]] = action[:, 2:]
         env_action[:, [1, 3, 5, 7]] = action[:, 1:]
 
         reward, dones = env.step(env_action)
-
-        if step > 0:
-            # set leg phase to compute reward corresponding to gait contact pattern
-            leg_phase = compute_phase(previous_CPG=CPG_signal[:, :, step-1], current_CPG=CPG_signal[:, :, step])
-            env.set_leg_phase(leg_phase)
 
         env.get_CPG_reward()
         temp_CPG_rewards = env._CPG_reward
@@ -419,13 +440,11 @@ for update in range(3000):
             CPG_not_dones = np.ones((env.num_envs,), dtype=np.float32)
         
         # log reward for CPG policy
-        
         if (update % 5 == 0) and (step % 25 == 0) and (1 < cfg['environment']['num_envs']):
             env.reward_logging()
             ppo.extra_log(env.reward_log, update * n_steps + step, type='reward')
             ppo.extra_log(action, update * n_steps + step, type='action')
-        
-
+    
     # update CPG policy
     velocity = np.zeros(env.num_envs)[:, np.newaxis].astype(np.float32)
     CPG_ppo.update(actor_obs=velocity, value_obs=velocity,
@@ -435,8 +454,8 @@ for update in range(3000):
     # update local policy
     obs, _ = env.observe_logging()
     
-    CPG_phase = ((n_steps * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :]) \
-                    - (((n_steps * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :])).astype(int)
+    CPG_phase = ((intermediate_time + (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :]) \
+                - (((intermediate_time + (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :])).astype(int)
     CPG_phase = np.squeeze(CPG_phase)
     assert (0 <= CPG_phase).all() and (CPG_phase <= 1).all(), "CPG_phase not in correct range"
 
@@ -458,7 +477,11 @@ for update in range(3000):
 
     end = time.time()
 
-    # env.increase_cost_scale()  # curriculum learning
+    # update intermediate time
+    intermediate_time += next_initialize_steps[:, np.newaxis] * cfg['environment']['control_dt']
+
+    # # increase cost (curriculum learning)
+    # env.increase_cost_scale()
 
     print('----------------------------------------------------')
     print('{:>6}th iteration'.format(update))

@@ -46,16 +46,18 @@ class RaisimGymEnv {
   ////////////////////////////////////////
 
   /////// optional methods ///////
+  virtual void reset_w_previous() = 0;
   virtual void curriculumUpdate() {};
   virtual void close() { if(server_) server_->killServer(); };
   virtual void setSeed(int seed) {};
   virtual void reward_logging(Eigen::Ref<EigenVec> rewards) = 0;
   virtual void contact_logging(Eigen::Ref<EigenVec> contacts) = 0;
   virtual void set_target_velocity(Eigen::Ref<EigenVec> velocity) = 0;
-  virtual void get_CPG_reward(Eigen::Ref<EigenVec> CPG_reward) = 0;
-  virtual void calculate_cost() = 0;
-  virtual void comprehend_contacts() = 0;
-  virtual void set_leg_phase(Eigen::Ref<EigenVec> leg_phase) = 0;
+  // virtual void get_CPG_reward(Eigen::Ref<EigenVec> CPG_reward) = 0;
+  // virtual void calculate_cost() = 0;
+  // virtual void comprehend_contacts() = 0;
+  // virtual void set_leg_phase(Eigen::Ref<EigenVec> leg_phase) = 0;
+  // virtual void set_next_initialize_steps(int next_initialize_steps) = 0;
   ////////////////////////////////
 
   void setSimulationTimeStep(double dt) { simulation_dt_ = dt; world_->setTimeStep(dt); }

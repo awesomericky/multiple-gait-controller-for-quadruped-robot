@@ -17,11 +17,11 @@ class Actor:
 
     def sample(self, obs, PPO_type):
         if PPO_type == 'CPG':
-            logits = torch.clamp(torch.relu(self.architecture.architecture(obs)), min=0.1, max=1.)
+            logits = torch.clamp(self.architecture.architecture(obs), min=0.1, max=1.)
             actions, log_prob = self.distribution.sample(logits)
 
             ## For real action ##
-            actions = torch.clamp(torch.relu(actions), min=0.1, max=1.)  # clipping amplitude (Architecture 5)
+            actions = torch.clamp(actions, min=0.1, max=1.)  # clipping amplitude (Architecture 5)
             # actions[:, 1:] = torch.tanh(actions[:, 1:])
             # actions[:, 2:] = torch.clamp(actions[:, 2:], min=-1, max=1)
             return actions.cpu().detach(), log_prob.cpu().detach()
@@ -44,7 +44,7 @@ class Actor:
 
     def evaluate(self, obs, actions, PPO_type):
         if PPO_type == 'CPG':
-            action_mean = torch.relu(self.architecture.architecture(obs))
+            action_mean = self.architecture.architecture(obs)
             return self.distribution.evaluate(obs, action_mean, actions)
         elif PPO_type == 'local' or PPO_type == None:
             action_mean = self.architecture.architecture(obs)

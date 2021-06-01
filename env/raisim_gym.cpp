@@ -21,6 +21,7 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def(py::init<std::string, std::string>(), py::arg("resourceDir"), py::arg("cfg"))
     .def("init", &VectorizedEnvironment<ENVIRONMENT>::init)
     .def("reset", &VectorizedEnvironment<ENVIRONMENT>::reset)
+    .def("reset_w_previous", &VectorizedEnvironment<ENVIRONMENT>::reset_w_previous)
     .def("observe", &VectorizedEnvironment<ENVIRONMENT>::observe)
     .def("step", &VectorizedEnvironment<ENVIRONMENT>::step)
     .def("setSeed", &VectorizedEnvironment<ENVIRONMENT>::setSeed)
@@ -42,9 +43,8 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def("set_target_velocity", &VectorizedEnvironment<ENVIRONMENT>::set_target_velocity)
     .def("get_CPG_reward", &VectorizedEnvironment<ENVIRONMENT>::get_CPG_reward)
     .def("increase_cost_scale", &VectorizedEnvironment<ENVIRONMENT>::increase_cost_scale)
-    .def("calculate_cost", &VectorizedEnvironment<ENVIRONMENT>::calculate_cost)
-    .def("comprehend_contacts", &VectorizedEnvironment<ENVIRONMENT>::comprehend_contacts)
     .def("set_leg_phase", &VectorizedEnvironment<ENVIRONMENT>::set_leg_phase)
+    .def("set_next_initialize_steps", &VectorizedEnvironment<ENVIRONMENT>::set_next_initialize_steps)
     .def(py::pickle(
         [](const VectorizedEnvironment<ENVIRONMENT> &p) { // __getstate__ --> Pickling to Python
             /* Return a tuple that fully encodes the state of the object */
