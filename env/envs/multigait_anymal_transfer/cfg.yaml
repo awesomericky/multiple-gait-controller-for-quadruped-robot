@@ -55,3 +55,4 @@ architecture:
   CPG_value_net: [128]
 
 logger: 'tb'
+force_CPU: False

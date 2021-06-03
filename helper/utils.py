@@ -1,10 +1,18 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from os.path import isdir
+from os import makedirs
 
+def check_saving_folder(folder_name):
+    if not isdir(folder_name):
+        makedirs(folder_name)
 
-def joint_angle_plotting(update, t_range, CPG_signal, \
+def joint_angle_plotting(update, folder_name, t_range, CPG_signal, \
                          FR_thigh_joint_history, FL_thigh_joint_history, RR_thigh_joint_history, RL_thigh_joint_history,\
                          FR_calf_joint_history, FL_calf_joint_history, RR_calf_joint_history, RL_calf_joint_history):
+
+    final_folder_name = f'joint_plot/{folder_name}'
+    check_saving_folder(final_folder_name)
 
     fig, ax = plt.subplots(2,2,figsize=(28, 15))
 
@@ -33,7 +41,7 @@ def joint_angle_plotting(update, t_range, CPG_signal, \
     ax[1, 1].set_title('RL', fontsize=25)
 
     plt.legend()
-    plt.savefig(f'joint_plot/Thigh_joint_angle_{update}.png')
+    plt.savefig(f'{final_folder_name}/Thigh_joint_angle_{update}.png')
     plt.close()
 
 
@@ -60,10 +68,13 @@ def joint_angle_plotting(update, t_range, CPG_signal, \
     ax[1, 1].set_xlabel('time [s]', fontsize=20)
 
     plt.legend()
-    plt.savefig(f'joint_plot/Calf_joint_angle_{update}.png')
+    plt.savefig(f'{final_folder_name}/Calf_joint_angle_{update}.png')
     plt.close()
 
-def contact_plotting(update, contact_log):
+def contact_plotting(update, folder_name, contact_log):
+    final_folder_name = f'contact_plot/{folder_name}'
+    check_saving_folder(final_folder_name)
+
     start = 100
     total_step = 200
     single_step = 50
@@ -78,10 +89,13 @@ def contact_plotting(update, contact_log):
     fig.colorbar(img)
     ax.set_title('contact', fontsize=20)
     ax.set_xlabel('time [s]')
-    plt.savefig(f'contact_plot/contact_{update}.png')
+    plt.savefig(f'{final_folder_name}/contact_{update}.png')
     plt.close()
 
-def CPG_and_velocity_plotting(update, n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj):
+def CPG_and_velocity_plotting(update, folder_name, n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj):
+    final_folder_name = f'CPG_and_velocity_plot/{folder_name}'
+    check_saving_folder(final_folder_name)
+
     time_axis = np.arange(n_steps) * 0.01
     plt.plot(time_axis, CPG_signal_period_traj, label='CPG_period')
     plt.plot(time_axis, target_velocity_traj, label='target_velocity')
@@ -89,5 +103,7 @@ def CPG_and_velocity_plotting(update, n_steps, CPG_signal_period_traj, target_ve
     plt.title('CPG and velocity', fontsize=20)
     plt.xlabel('time [s]')
     plt.legend()
-    plt.savefig(f'CPG_and_velocity_plot/CPG_vel_{update}.png')
+    plt.savefig(f'{final_folder_name}/CPG_vel_{update}.png')
     plt.close()
+
+check_saving_folder('contact_plot/ABC')

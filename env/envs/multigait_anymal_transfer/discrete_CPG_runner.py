@@ -54,15 +54,20 @@ args = parser.parse_args()
 mode = args.mode
 weight_path = args.weight
 
-# check if gpu is available
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 # directories
 task_path = os.path.dirname(os.path.realpath(__file__))
 home_path = task_path + "/../../../../.."
 
 # config
 cfg = YAML().load(open(task_path + "/cfg.yaml", 'r'))
+
+# check if gpu is available
+if cfg['force_CPU']:
+    device = torch.device('cpu')
+else:
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+plot_folder_name = f"{cfg['environment']['gait']}_{int(cfg['environment']['velocity']['min'])}_{int(cfg['environment']['velocity']['max'])}"
 
 # create environment from the configuration file
 env = VecEnv(multigait_anymal_transfer.RaisimGymEnv(home_path + "/rsc",
@@ -95,14 +100,14 @@ avg_rewards = []
 
 CPG_actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, 1, CPG_signal_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
-                             CPG_signal_dim, 0.1, type='CPG'),
+                             CPG_signal_dim, 0.1, type='CPG', device=device),
                          device)
 CPG_critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['CPG_value_net'], nn.LeakyReLU, 1, 1),
                            device)
 
 actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
-                             act_dim, 1.0),  # 1.0
+                             act_dim, 1.0, device=device),  # 1.0
                          device)
 critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, 1),
                            device)
@@ -305,8 +310,8 @@ for update in range(4000):
         
         # save & plot contact log
         np.savez_compressed(f'contact_plot/contact_{update}.npz', contact=contact_log)
-        contact_plotting(update, contact_log)
-        CPG_and_velocity_plotting(update, evaluate_n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
+        contact_plotting(update, plot_folder_name, contact_log)
+        CPG_and_velocity_plotting(update, plot_folder_name, evaluate_n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
 
         # env.stop_video_recording()
         # env.turn_off_visualization()
@@ -471,7 +476,7 @@ for update in range(4000):
 
     # plot joint value
     if update % 50 == 0:
-        joint_angle_plotting(update, np.arange(n_steps) * cfg['environment']['control_dt'], CPG_signal[0, :, :-1],\
+        joint_angle_plotting(update, plot_folder_name, np.arange(n_steps) * cfg['environment']['control_dt'], CPG_signal[0, :, :-1],\
                                 FR_thigh_joint_history, FL_thigh_joint_history, RR_thigh_joint_history, RL_thigh_joint_history,\
                                 FR_calf_joint_history, FL_calf_joint_history, RR_calf_joint_history, RL_calf_joint_history)
 

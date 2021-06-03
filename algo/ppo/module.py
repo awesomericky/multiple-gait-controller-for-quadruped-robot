@@ -126,13 +126,13 @@ class MLP(nn.Module):
 
 
 class MultivariateGaussianDiagonalCovariance(nn.Module):
-    def __init__(self, dim, init_std, type=None):
+    def __init__(self, dim, init_std, device, type=None):
         super(MultivariateGaussianDiagonalCovariance, self).__init__()
         self.dim = dim
         if type == 'CPG':
-            self.std = init_std * torch.ones(dim) # fixed
+            self.std = init_std * torch.ones(dim, device=device) # fixed
         else:
-            self.std = nn.Parameter(init_std * torch.ones(dim))  # trainable
+            self.std = nn.Parameter(init_std * torch.ones(dim, device=device))  # trainable
         
         self.distribution = None
 
