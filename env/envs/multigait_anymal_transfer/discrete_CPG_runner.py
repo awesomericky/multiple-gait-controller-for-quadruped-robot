@@ -257,18 +257,21 @@ for update in range(4000):
                     env.set_target_velocity(velocity)
                 
                 # generate new CPG signal parameter
-                CPG_a_old = CPG_a_new.copy()
-                CPG_b_old = CPG_b_new.copy()
+                CPG_a_old = CPG_a_new
+                CPG_b_old = CPG_b_new
                 # CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(normalized_velocity))
                 with torch.no_grad():
                     if make_new_graph:
                         CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(velocity))
                         CPG_signal_period = torch.clamp(CPG_signal_period, min=0.1, max=1.).cpu().detach().numpy()
                     else:
-                        CPG_signal_period = CPG_actor.inference(velocity)
+                        CPG_signal_period = CPG_ppo.inference(velocity)
 
                 CPG_a_new = 2 * np.pi / (CPG_signal_period + 1e-6)
                 CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old
+
+                assert id(CPG_a_old) != id(CPG_a_new), "Check memory allocation"
+                assert id(CPG_b_old) != id(CPG_b_new), "Check memory allocation"
 
                 # generate CPG signal
                 t_period = CPG_period
@@ -291,7 +294,7 @@ for update in range(4000):
                     action_ll[:, 0] = torch.relu(action_ll[:, 0])
                     action_ll = action_ll.cpu().detach().numpy()
                 else:
-                    action_ll = actor.inference(obs)
+                    action_ll = ppo.inference(obs)
 
             # env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * CPG_signal[:, :, step] + action_ll[:, 1][:, np.newaxis]
             env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * CPG_signal[:, :, step]
@@ -364,13 +367,16 @@ for update in range(4000):
                 env.set_target_velocity(velocity)
             
             # generate new CPG signal parameter (w/o random initialize)
-            CPG_a_old = CPG_a_new.copy()
-            CPG_b_old = CPG_b_new.copy()
+            CPG_a_old = CPG_a_new
+            CPG_b_old = CPG_b_new
             # CPG_signal_period = CPG_ppo.observe(normalized_velocity)  # CPG_ppo policy outputs period
             CPG_signal_period = CPG_ppo.observe(velocity)
 
             CPG_a_new = 2 * np.pi / CPG_signal_period
             CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old
+
+            assert id(CPG_a_old) != id(CPG_a_new), "Check memory allocation"
+            assert id(CPG_b_old) != id(CPG_b_new), "Check memory allocation"
 
             # generate CPG signal
             t_period = CPG_period + 1 if (step == n_steps - CPG_period) else CPG_period
