@@ -17,11 +17,13 @@ import matplotlib.pyplot as plt
 # print(end - start)
 
 update = "test"
-start = 400
-total_step = 100
+start = 200
+total_step = 200
 single_step = 50
 
 contact_log = np.load(f'contact_plot/contact_{update}.npz')['contact']
+contact_log = np.log(contact_log + 1e-6)
+contact_log = contact_log - np.min(contact_log)
 
 fig, ax = plt.subplots(1,1, figsize=(20,10))
 img = ax.imshow(contact_log[:, start:start + total_step], aspect='auto')
@@ -32,7 +34,7 @@ ax.set_yticks([0, 1, 2, 3])
 ax.set_xticklabels(x_label_list)
 ax.set_yticklabels(y_label_list)
 fig.colorbar(img)
-ax.set_title("contact", fontsize=20)
+ax.set_title("contact (log scale)", fontsize=20)
 ax.set_xlabel('time [s]')
 plt.savefig(f'contact_plot/contact_prac_{update}.png')
 plt.show()

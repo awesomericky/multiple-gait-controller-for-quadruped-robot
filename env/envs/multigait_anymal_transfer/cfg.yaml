@@ -43,9 +43,9 @@ environment:
       threshold: 0.07 # penalty only given if the height is out of threhold
       coeff: 0.0 #0.3
   velocity:
-    min: 1.0
-    max: 2.0
-  gait: 'pace'
+    min: 0.0
+    max: 1.0
+  gait: 'trot'
   single_velocity: False
 
 architecture:
