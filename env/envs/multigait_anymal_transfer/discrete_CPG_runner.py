@@ -209,7 +209,7 @@ RR_calf_joint_history = np.zeros(n_steps)
 RL_thigh_joint_history = np.zeros(n_steps)
 RL_calf_joint_history = np.zeros(n_steps)
 env_action = np.zeros((env.num_envs, 8), dtype=np.float32)
-CPG_signal = np.zeros((env.num_envs, 4, n_steps + 1), dtype=np.float32)
+CPG_signal = np.zeros((env.num_envs, 4, evaluate_n_steps), dtype=np.float32)
 
 # initialize logging value (when evaluating)
 contact_log = np.zeros((4, evaluate_n_steps), dtype=np.float32) # 0: FR, 1: FL, 2: RR, 3:RL
@@ -477,7 +477,7 @@ for update in range(4000):
 
     # plot joint value
     if update % 50 == 0:
-        joint_angle_plotting(update, task_specific_folder_name, np.arange(n_steps) * cfg['environment']['control_dt'], CPG_signal[0, :, :-1],\
+        joint_angle_plotting(update, task_specific_folder_name, np.arange(n_steps) * cfg['environment']['control_dt'], CPG_signal[0, :, :n_steps],\
                                 FR_thigh_joint_history, FL_thigh_joint_history, RR_thigh_joint_history, RL_thigh_joint_history,\
                                 FR_calf_joint_history, FL_calf_joint_history, RR_calf_joint_history, RL_calf_joint_history)
 
