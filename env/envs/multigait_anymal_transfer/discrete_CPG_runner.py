@@ -199,6 +199,24 @@ if mode == 'retrain':
 target_gait_phase = np.array(target_gait_dict[cfg['environment']['gait']])
 evaluate_n_steps = n_steps * 2
 
+# Initialize
+FR_thigh_joint_history = np.zeros(n_steps)
+FR_calf_joint_history = np.zeros(n_steps)
+FL_thigh_joint_history = np.zeros(n_steps)
+FL_calf_joint_history = np.zeros(n_steps)
+RR_thigh_joint_history = np.zeros(n_steps)
+RR_calf_joint_history = np.zeros(n_steps)
+RL_thigh_joint_history = np.zeros(n_steps)
+RL_calf_joint_history = np.zeros(n_steps)
+env_action = np.zeros((env.num_envs, 8), dtype=np.float32)
+CPG_signal = np.zeros((env.num_envs, 4, n_steps + 1), dtype=np.float32)
+
+# initialize logging value (when evaluating)
+contact_log = np.zeros((4, evaluate_n_steps), dtype=np.float32) # 0: FR, 1: FL, 2: RR, 3:RL
+CPG_signal_period_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
+target_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
+real_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
+
 for update in range(4000):
     
     ## Evaluating ##
@@ -233,14 +251,14 @@ for update in range(4000):
         CPG_b_new = np.broadcast_to(target_gait_phase[:, np.newaxis], (env.num_envs, 4, 1))
         CPG_a_old = np.zeros((env.num_envs, 1))
         CPG_b_old = np.broadcast_to(target_gait_phase[:, np.newaxis], (env.num_envs, 4, 1))
-        CPG_signal = np.zeros((env.num_envs, 4, evaluate_n_steps), dtype=np.float32)
-        env_action = np.zeros((env.num_envs, 8), dtype=np.float32)
+        # CPG_signal = np.zeros((env.num_envs, 4, evaluate_n_steps), dtype=np.float32)
+        # env_action = np.zeros((env.num_envs, 8), dtype=np.float32)
 
-        # initialize logging value
-        contact_log = np.zeros((4, evaluate_n_steps), dtype=np.float32) # 0: FR, 1: FL, 2: RR, 3:RL
-        CPG_signal_period_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
-        target_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
-        real_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
+        # # initialize logging value
+        # contact_log = np.zeros((4, evaluate_n_steps), dtype=np.float32) # 0: FR, 1: FL, 2: RR, 3:RL
+        # CPG_signal_period_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
+        # target_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
+        # real_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
         
         for step in range(evaluate_n_steps):
             frame_start = time.time()
@@ -257,8 +275,8 @@ for update in range(4000):
                     env.set_target_velocity(velocity)
                 
                 # generate new CPG signal parameter
-                CPG_a_old = CPG_a_new
-                CPG_b_old = CPG_b_new
+                CPG_a_old = CPG_a_new.copy()
+                CPG_b_old = CPG_b_new.copy()
                 # CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(normalized_velocity))
                 with torch.no_grad():
                     if make_new_graph:
@@ -339,20 +357,8 @@ for update in range(4000):
     CPG_b_new = np.broadcast_to(target_gait_phase[:, np.newaxis], (env.num_envs, 4, 1))
     CPG_a_old = np.zeros((env.num_envs, 1))
     CPG_b_old = np.broadcast_to(target_gait_phase[:, np.newaxis], (env.num_envs, 4, 1))
-    CPG_signal = np.zeros((env.num_envs, 4, n_steps + 1), dtype=np.float32)
     CPG_rewards = np.zeros((env.num_envs, 1), dtype=np.float32)
     CPG_not_dones = np.ones((env.num_envs,), dtype=np.float32)
-
-    env_action = np.zeros((env.num_envs, 8), dtype=np.float32)
-
-    FR_thigh_joint_history = np.zeros(n_steps)
-    FR_calf_joint_history = np.zeros(n_steps)
-    FL_thigh_joint_history = np.zeros(n_steps)
-    FL_calf_joint_history = np.zeros(n_steps)
-    RR_thigh_joint_history = np.zeros(n_steps)
-    RR_calf_joint_history = np.zeros(n_steps)
-    RL_thigh_joint_history = np.zeros(n_steps)
-    RL_calf_joint_history = np.zeros(n_steps)
 
     for step in range(n_steps):
         if step % CPG_period == 0:
@@ -367,8 +373,8 @@ for update in range(4000):
                 env.set_target_velocity(velocity)
             
             # generate new CPG signal parameter (w/o random initialize)
-            CPG_a_old = CPG_a_new
-            CPG_b_old = CPG_b_new
+            CPG_a_old = CPG_a_new.copy()
+            CPG_b_old = CPG_b_new.copy()
             # CPG_signal_period = CPG_ppo.observe(normalized_velocity)  # CPG_ppo policy outputs period
             CPG_signal_period = CPG_ppo.observe(velocity)
 
