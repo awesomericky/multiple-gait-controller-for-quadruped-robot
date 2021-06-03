@@ -67,7 +67,7 @@ if cfg['force_CPU']:
 else:
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-plot_folder_name = f"{cfg['environment']['gait']}_{int(cfg['environment']['velocity']['min'])}_{int(cfg['environment']['velocity']['max'])}"
+task_specific_folder_name = f"{cfg['environment']['gait']}_{int(cfg['environment']['velocity']['min'])}_{int(cfg['environment']['velocity']['max'])}"
 
 # create environment from the configuration file
 env = VecEnv(multigait_anymal_transfer.RaisimGymEnv(home_path + "/rsc",
@@ -113,7 +113,7 @@ critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.L
                            device)
 
 saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
-                           save_items=[task_path + "/cfg.yaml", task_path + "/Environment.hpp"])
+                           save_items=[task_path + "/cfg.yaml", task_path + "/Environment.hpp"], task_specific_name=task_specific_folder_name)
 
 # logging
 if cfg['logger'] == 'tb':
@@ -310,8 +310,8 @@ for update in range(4000):
         
         # save & plot contact log
         np.savez_compressed(f'contact_plot/contact_{update}.npz', contact=contact_log)
-        contact_plotting(update, plot_folder_name, contact_log)
-        CPG_and_velocity_plotting(update, plot_folder_name, evaluate_n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
+        contact_plotting(update, task_specific_folder_name, contact_log)
+        CPG_and_velocity_plotting(update, task_specific_folder_name, evaluate_n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
 
         # env.stop_video_recording()
         # env.turn_off_visualization()
@@ -476,7 +476,7 @@ for update in range(4000):
 
     # plot joint value
     if update % 50 == 0:
-        joint_angle_plotting(update, plot_folder_name, np.arange(n_steps) * cfg['environment']['control_dt'], CPG_signal[0, :, :-1],\
+        joint_angle_plotting(update, task_specific_folder_name, np.arange(n_steps) * cfg['environment']['control_dt'], CPG_signal[0, :, :-1],\
                                 FR_thigh_joint_history, FL_thigh_joint_history, RR_thigh_joint_history, RL_thigh_joint_history,\
                                 FR_calf_joint_history, FL_calf_joint_history, RR_calf_joint_history, RL_calf_joint_history)
 
