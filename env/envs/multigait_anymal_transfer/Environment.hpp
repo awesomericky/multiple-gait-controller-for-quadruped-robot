@@ -42,7 +42,7 @@ namespace raisim
             /// initialize containers
             gc_.setZero(gcDim_);
             gc_init_.setZero(gcDim_);
-            next_gc_init_.setZero(gcDim_);
+            // next_gc_init_.setZero(gcDim_);
             gv_.setZero(gvDim_);
             gv_init_.setZero(gvDim_);
             pTarget_.setZero(gcDim_);
@@ -85,7 +85,7 @@ namespace raisim
 
             // nominal configuration of laikago
             gc_init_ << 0, 0, 0.46, 1, 0.0, 0.0, 0.0, 0.5, -1, 0.5, -1, 0.5, -1, 0.5, -1;
-            update_initial_state(gc_init_);
+            // update_initial_state(gc_init_);
 
             /// set pd gains
             Eigen::VectorXd jointPgain(gvDim_), jointDgain(gvDim_);
@@ -136,7 +136,7 @@ namespace raisim
 
         }
 
-        void reset_w_previous() final
+        void reset_w_previous()
         {
             anymal_->setState(next_gc_init_, gv_init_);
 
@@ -259,9 +259,9 @@ namespace raisim
 
             comprehend_contacts();
 
-            if (current_n_state == next_initialize_n_state)
-                update_initial_state(gc_);
-            current_n_state += 1;
+            // if (current_n_state == next_initialize_n_state)
+            //     update_initial_state(gc_);
+            // current_n_state += 1;
 
         }
 
@@ -410,10 +410,10 @@ namespace raisim
             next_initialize_n_state = next_initialize_steps;
         }
 
-        void update_initial_state(Eigen::VectorXd current_state)
-        {
-            next_gc_init_ = current_state;
-        }
+        // void update_initial_state(Eigen::VectorXd current_state)
+        // {
+        //     next_gc_init_ = current_state;
+        // }
 
         bool isTerminalState(float &terminalReward) final
         {

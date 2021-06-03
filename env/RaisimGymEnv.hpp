@@ -46,7 +46,7 @@ class RaisimGymEnv {
   ////////////////////////////////////////
 
   /////// optional methods ///////
-  virtual void reset_w_previous() = 0;
+  // virtual void reset_w_previous() = 0;
   virtual void curriculumUpdate() {};
   virtual void close() { if(server_) server_->killServer(); };
   virtual void setSeed(int seed) {};

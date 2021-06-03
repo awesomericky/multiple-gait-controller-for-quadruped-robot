@@ -77,17 +77,6 @@ class VectorizedEnvironment {
       env->increase_cost_scale();
   }
 
-  // void calculate_cost(){
-  //   for (auto env: environments_)
-  //     env->calculate_cost();
-  // }
-
-  // void comprehend_contacts(){
-  //   for (auto env: environments_)
-  //     env->comprehend_contacts();
-  // }
-  
-
   void observe(Eigen::Ref<EigenRowMajorMat> &ob) {
 #pragma omp parallel for
     for (int i = 0; i < num_envs_; i++)
@@ -137,12 +126,6 @@ class VectorizedEnvironment {
     for (int i = 0; i < num_envs_; i++)
       environments_[i]->set_next_initialize_steps(next_initialize_steps[i]);
   }
-
-//   void update_initial_state(Eigen::Ref<EigenRowMajorMat> &current_state) {
-// #pragma omp parallel for
-//     for (auto env: environments_)
-//       env->update_initial_state(current_state);
-//   }
 
   void turnOnVisualization() { if(render_) environments_[0]->turnOnVisualization(); }
   void turnOffVisualization() { if(render_) environments_[0]->turnOffVisualization(); }

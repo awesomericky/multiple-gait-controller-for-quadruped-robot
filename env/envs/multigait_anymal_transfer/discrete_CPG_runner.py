@@ -196,14 +196,8 @@ if mode == 'retrain':
 
 """
 
-# t_range = (np.arange(n_steps) * cfg['environment']['control_dt'])[np.newaxis, :]
 target_gait_phase = np.array(target_gait_dict[cfg['environment']['gait']])
-evaluate_n_steps = n_steps * 3
-
-# needed for initializing w/ random state in previous trajectory
-CPG_a_previous_traj = np.zeros((env.num_envs, 1))
-CPG_b_previous_traj = np.broadcast_to(target_gait_phase[:, np.newaxis], (env.num_envs, 4, 1))
-intermediate_time = np.zeros((env.num_envs, 1))
+evaluate_n_steps = n_steps * 2
 
 for update in range(4000):
     
@@ -248,7 +242,7 @@ for update in range(4000):
             frame_start = time.time()
 
             if step % CPG_period == 0:
-                if step % 300 == 0:  # sample velocity every 3 seconds
+                if step % velocity_period == 0:
                     # sample new velocity
                     if cfg['environment']['single_velocity']:
                         normalized_velocity = np.broadcast_to(np.random.uniform(low = 0, high=1, size=1)[:, np.newaxis], (env.num_envs, 1)).astype(np.float32)
@@ -309,7 +303,6 @@ for update in range(4000):
 
         
         # save & plot contact log
-        np.savez_compressed(f'contact_plot/contact_{update}.npz', contact=contact_log)
         contact_plotting(update, task_specific_folder_name, contact_log)
         CPG_and_velocity_plotting(update, task_specific_folder_name, evaluate_n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
 
@@ -319,11 +312,9 @@ for update in range(4000):
         env.save_scaling(saver.data_dir, str(update))
     
     ### TRAINING ###
-    next_initialize_steps = np.random.choice(n_steps+1, env.num_envs, replace=True).astype(int)  # number of states in one trajectory is (n_steps + 1)
-    env.set_next_initialize_steps(next_initialize_steps)
 
     start = time.time()
-    env.reset_w_previous()
+    env.reset()
 
     reward_CPG_sum = 0
     reward_local_sum = 0
@@ -360,36 +351,22 @@ for update in range(4000):
 
                 env.set_target_velocity(velocity)
             
-            # generate new CPG signal parameter
-            if step == 0:
-                CPG_a_old = CPG_a_previous_traj.copy()
-                CPG_b_old = CPG_b_previous_traj.copy()
-
-                # reset CPG in previous trajectory
-                CPG_a_previous_traj = np.zeros((env.num_envs, 1))
-                CPG_b_previous_traj = np.zeros((env.num_envs, 4, 1))
-            else:
-                CPG_a_old = CPG_a_new.copy()
-                CPG_b_old = CPG_b_new.copy()
+            # generate new CPG signal parameter (w/o random initialize)
+            CPG_a_old = CPG_a_new.copy()
+            CPG_b_old = CPG_b_new.copy()
             # CPG_signal_period = CPG_ppo.observe(normalized_velocity)  # CPG_ppo policy outputs period
             CPG_signal_period = CPG_ppo.observe(velocity)
 
             CPG_a_new = 2 * np.pi / CPG_signal_period
-            CPG_b_new = ((CPG_a_old - CPG_a_new) * (intermediate_time + (step * cfg['environment']['control_dt'])))[:, np.newaxis, :] + CPG_b_old
+            CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old
 
             # generate CPG signal
             t_period = CPG_period + 1 if (step == n_steps - CPG_period) else CPG_period
-            t_range = (np.arange(step, step + t_period) * cfg['environment']['control_dt'])[np.newaxis, :] + intermediate_time
-            t_range = t_range[:, np.newaxis, :]
+            t_range = (np.arange(step, step + t_period) * cfg['environment']['control_dt'])[np.newaxis, np.newaxis, :]
             CPG_signal[:, :, step:step + t_period] = sin(t_range, CPG_a_new[:, :, np.newaxis], CPG_b_new)
             # CPG_signal & CPG_signal_derivative dimension change is as following
             # (1, 1, CPG_period) (n_env, 1, 1) (n_env, 4, 1)  ==> (n_env, 4, CPG_period)
 
-            # prepare for next update initialization
-            previous_traj_state = np.where(step <= next_initialize_steps, 1, 0) * np.where(next_initialize_steps < step + t_period, 1, 0)
-            CPG_a_previous_traj += previous_traj_state[:, np.newaxis] * CPG_a_new
-            CPG_b_previous_traj += previous_traj_state[:, np.newaxis, np.newaxis] * CPG_b_new
-        
         # set leg phase to compute reward corresponding to gait contact pattern
         if step > 0:
             leg_phase = compute_phase(previous_CPG=CPG_signal[:, :, step-1], current_CPG=CPG_signal[:, :, step])
@@ -397,8 +374,8 @@ for update in range(4000):
         
         obs, non_obs = env.observe_logging()
         
-        CPG_phase = ((intermediate_time + (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :]) \
-                    - (((intermediate_time + (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :])).astype(int)
+        CPG_phase = ((step * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :]) \
+                    - (((step * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :])).astype(int)
         CPG_phase = np.squeeze(CPG_phase)
         assert (0 <= CPG_phase).all() and (CPG_phase <= 1).all(), "CPG_phase not in correct range"
         
@@ -458,9 +435,9 @@ for update in range(4000):
 
     # update local policy
     obs, _ = env.observe_logging()
-    
-    CPG_phase = ((intermediate_time + (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :]) \
-                - (((intermediate_time + (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :])).astype(int)
+
+    CPG_phase = ((step * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :]) \
+                - (((step * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :])).astype(int)
     CPG_phase = np.squeeze(CPG_phase)
     assert (0 <= CPG_phase).all() and (CPG_phase <= 1).all(), "CPG_phase not in correct range"
 
@@ -481,9 +458,6 @@ for update in range(4000):
                                 FR_calf_joint_history, FL_calf_joint_history, RR_calf_joint_history, RL_calf_joint_history)
 
     end = time.time()
-
-    # update intermediate time
-    intermediate_time += next_initialize_steps[:, np.newaxis] * cfg['environment']['control_dt']
 
     # # increase cost (curriculum learning)
     # env.increase_cost_scale()

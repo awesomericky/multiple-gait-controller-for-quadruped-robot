@@ -75,6 +75,8 @@ def contact_plotting(update, folder_name, contact_log):
     final_folder_name = f'contact_plot/{folder_name}'
     check_saving_folder(final_folder_name)
 
+    np.savez_compressed(f'{final_folder_name}/contact_{update}.npz', contact=contact_log)
+
     start = 100
     total_step = 200
     single_step = 50
@@ -105,5 +107,3 @@ def CPG_and_velocity_plotting(update, folder_name, n_steps, CPG_signal_period_tr
     plt.legend()
     plt.savefig(f'{final_folder_name}/CPG_vel_{update}.png')
     plt.close()
-
-check_saving_folder('contact_plot/ABC')

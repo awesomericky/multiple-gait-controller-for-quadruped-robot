@@ -10,8 +10,8 @@ environment:
   simulation_dt: 0.0025
   CPG_control_dt: 0.05
   control_dt: 0.01
-  velocity_sampling_dt: 4.0
-  max_time: 4.0
+  velocity_sampling_dt: 3.0
+  max_time: 6.0
   n_reward: 12
   CPG_reward:
     forwardVel_difference:
