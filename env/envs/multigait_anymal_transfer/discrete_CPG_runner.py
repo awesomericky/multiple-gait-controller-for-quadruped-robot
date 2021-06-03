@@ -214,11 +214,15 @@ for update in range(4000):
             'critic_architecture_state_dict': critic.architecture.state_dict(),
             'optimizer_state_dict': ppo.optimizer.state_dict(),
         }, saver.data_dir+"/full_"+str(update)+'.pt')
-        # we create another graph just to demonstrate the save/load method
-        CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, 1, CPG_signal_dim)
-        CPG_loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['CPG_actor_architecture_state_dict'])
-        local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim)
-        local_loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['actor_architecture_state_dict'])
+
+        make_new_graph = (update % 2000 == 0) and (update != 0)
+        
+        if make_new_graph:
+            # we create another graph just to demonstrate the save/load method
+            CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, 1, CPG_signal_dim)
+            CPG_loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['CPG_actor_architecture_state_dict'])
+            local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim)
+            local_loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['actor_architecture_state_dict'])
 
         env.reset()
         # env.turn_on_visualization()
@@ -256,8 +260,12 @@ for update in range(4000):
                 CPG_a_old = CPG_a_new.copy()
                 CPG_b_old = CPG_b_new.copy()
                 # CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(normalized_velocity))
-                CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(velocity))
-                CPG_signal_period = torch.clamp(CPG_signal_period, min=0.1, max=1.).cpu().detach().numpy()
+                with torch.no_grad():
+                    if make_new_graph:
+                        CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(velocity))
+                        CPG_signal_period = torch.clamp(CPG_signal_period, min=0.1, max=1.).cpu().detach().numpy()
+                    else:
+                        CPG_signal_period = CPG_actor.inference(velocity)
 
                 CPG_a_new = 2 * np.pi / (CPG_signal_period + 1e-6)
                 CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old
@@ -276,11 +284,15 @@ for update in range(4000):
             assert (0 <= CPG_phase).all() and (CPG_phase <= 1).all(), "CPG_phase not in correct range"
             
             obs = np.concatenate([obs, CPG_signal_period, CPG_phase], axis=1, dtype=np.float32)
-            action_ll = local_loaded_graph.architecture(torch.from_numpy(obs))
-            action_ll[:, 0] = torch.relu(action_ll[:, 0])
-            # action_ll[:, 2:] = torch.clamp(action_ll[:, 2:], min=-1.3, max=1.3)
-            # action_ll[:, 1:] = torch.clamp(action_ll[:, 1:], min=-1.3, max=1.3)
-            action_ll = action_ll.cpu().detach().numpy()
+
+            with torch.no_grad():
+                if make_new_graph:
+                    action_ll = local_loaded_graph.architecture(torch.from_numpy(obs))
+                    action_ll[:, 0] = torch.relu(action_ll[:, 0])
+                    action_ll = action_ll.cpu().detach().numpy()
+                else:
+                    action_ll = actor.inference(obs)
+
             # env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * CPG_signal[:, :, step] + action_ll[:, 1][:, np.newaxis]
             env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * CPG_signal[:, :, step]
             env_action[:, [1, 3, 5, 7]] = action_ll[:, 1:]

@@ -53,6 +53,16 @@ class Actor:
             action_mean_clipped = torch.cat((torch.relu(action_mean[:, 0]).unsqueeze(-1), action_mean[:, 1:]), dim=1)  # clipping amplitude & shaft & calf (Architecture 5)
             return self.distribution.evaluate(obs, action_mean_clipped, actions)  # clipping amplitude (Architecture 4, 5)
             # return self.distribution.evaluate(obs, action_mean, actions)
+    
+    def inference(self, obs, PPO_type):
+        if PPO_type == 'CPG':
+            action_mean = torch.clamp(self.architecture.architecture(obs), min=0.1, max=1.)
+            return action_mean.cpu().detach()
+        elif PPO_type == 'local' or PPO_type == None:
+            action_mean = self.architecture.architecture(obs)
+            action_mean[:, 0] = torch.relu(action_mean[:, 0])  # clipping amplitude (Architecture 5)
+            return action_mean.cpu().detach()
+        
 
     def parameters(self):
         return [*self.architecture.parameters(), *self.distribution.parameters()]

@@ -91,6 +91,10 @@ class PPO:
         self.actions, self.actions_log_prob = self.actor.sample(torch.from_numpy(actor_obs).to(self.device), self.PPO_type)
         # self.actions = np.clip(self.actions.numpy(), self.env.action_space.low, self.env.action_space.high)
         return self.actions.cpu().numpy()
+    
+    def inference(self, actor_obs):
+        action = self.actor.inference(torch.from_numpy(actor_obs).to(self.device), self.PPO_type)
+        return action.cpu().numpy()
 
     def step(self, value_obs, rews, dones):
         if self.PPO_type == 'local' or self.PPO_type == None:
