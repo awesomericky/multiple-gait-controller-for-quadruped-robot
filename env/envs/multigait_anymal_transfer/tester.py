@@ -74,7 +74,7 @@ else:
 
     print("Visualizing and evaluating the policy: ", weight_path)
     load_model = torch.load(weight_path, map_location=torch.device('cpu'))['CPG_actor_architecture_state_dict']
-    pdb.set_trace()
+    # pdb.set_trace()
     CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], torch.nn.LeakyReLU, 1, CPG_signal_dim)
     CPG_loaded_graph.load_state_dict(torch.load(weight_path, map_location=torch.device('cpu'))['CPG_actor_architecture_state_dict'])
     local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], torch.nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim)
