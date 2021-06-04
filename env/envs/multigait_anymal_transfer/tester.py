@@ -1,4 +1,4 @@
-from ruamel.yaml import YAML, dump, RoundTripDumper
+from ruamel.yaml import YAML, dump, RoundTripDumper, tokens
 from raisimGymTorch.env.bin import multigait_anymal_transfer
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
 import raisimGymTorch.algo.ppo.module as ppo_module
@@ -25,13 +25,15 @@ def sin(x, a, b):
 parser = argparse.ArgumentParser()
 parser.add_argument('-w', '--weight', help='trained weight path', type=str, default='')
 args = parser.parse_args()
+weight_path = args.weight
 
 # directories
 task_path = os.path.dirname(os.path.realpath(__file__))
 home_path = task_path + "/../../../../.."
 
 # config
-cfg = YAML().load(open(task_path + "/cfg.yaml", 'r'))
+# cfg = YAML().load(open(task_path + "/cfg.yaml", 'r'))
+cfg = YAML().load(open(os.path.join(weight_path.rsplit('/', 1)[0], 'cfg.yaml'), 'r'))
 
 # create environment from the configuration file
 training_num_envs = cfg['environment']['num_envs']
@@ -55,9 +57,10 @@ velocity_period = 300  # sample velocity every 3 sec
 target_gait_dict = {'pace': [np.pi, 0, np.pi, 0], 'trot': [np.pi, 0, 0, np.pi], 'bound': [np.pi, np.pi, 0, 0]}
 target_gait_phase = np.array(target_gait_dict[cfg['environment']['gait']])
 
-weight_path = args.weight
 iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
 weight_dir = weight_path.rsplit('/', 1)[0] + '/'
+
+task_specific_folder_name = f"{cfg['environment']['gait']}_{int(cfg['environment']['velocity']['min'])}_{int(cfg['environment']['velocity']['max'])}"
 
 if weight_path == "":
     print("Can't find trained weight, please provide a trained weight with --weight switch\n")
@@ -70,10 +73,12 @@ else:
     start_step_id = 0
 
     print("Visualizing and evaluating the policy: ", weight_path)
+    load_model = torch.load(weight_path, map_location=torch.device('cpu'))['CPG_actor_architecture_state_dict']
+    pdb.set_trace()
     CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], torch.nn.LeakyReLU, 1, CPG_signal_dim)
-    CPG_loaded_graph.load_state_dict(torch.load(weight_path)['CPG_actor_architecture_state_dict'])
+    CPG_loaded_graph.load_state_dict(torch.load(weight_path, map_location=torch.device('cpu'))['CPG_actor_architecture_state_dict'])
     local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], torch.nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim)
-    local_loaded_graph.load_state_dict(torch.load(weight_path)['actor_architecture_state_dict'])
+    local_loaded_graph.load_state_dict(torch.load(weight_path, map_location=torch.device('cpu'))['actor_architecture_state_dict'])
 
     env.load_scaling(weight_dir, int(iteration_number))
     env.turn_on_visualization()
@@ -124,8 +129,9 @@ else:
             # generate new CPG signal parameter
             CPG_a_old = CPG_a_new.copy()
             CPG_b_old = CPG_b_new.copy()
-            CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(velocity))
-            CPG_signal_period = torch.clamp(CPG_signal_period, min=0.1, max=1.0).cpu().detach().numpy()
+            with torch.no_grad():
+                CPG_signal_period = CPG_loaded_graph.architecture(torch.from_numpy(velocity))
+                CPG_signal_period = torch.clamp(CPG_signal_period, min=0.1, max=1.0).cpu().detach().numpy()
 
             CPG_a_new = 2 * np.pi / (CPG_signal_period + 1e-6)
             CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old
@@ -139,16 +145,17 @@ else:
         
         obs, non_obs = env.observe_logging(False)
         CPG_phase = ((step * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :]) \
-                - (((step * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :])).astype(int)
+                    - (((step * cfg['environment']['control_dt']) + (CPG_b_new / CPG_a_new[:, np.newaxis, :])) / (2 * np.pi / CPG_a_new[:, np.newaxis, :])).astype(int)
         CPG_phase = np.squeeze(CPG_phase)
         assert (0 <= CPG_phase).all() and (CPG_phase <= 1).all(), "CPG_phase not in correct range"
         
         obs = np.concatenate([obs, CPG_signal_period, CPG_phase], axis=1, dtype=np.float32)
-        action_ll = local_loaded_graph.architecture(torch.from_numpy(obs))
-        action_ll[:, 0] = torch.relu(action_ll[:, 0])
-        # action_ll[:, 2:] = torch.clamp(action_ll[:, 2:], min=-1.3, max=1.3)
-        # action_ll[:, 1:] = torch.clamp(action_ll[:, 1:], min=-1.3, max=1.3)
-        action_ll = action_ll.cpu().detach().numpy()
+
+        with torch.no_grad():
+            action_ll = local_loaded_graph.architecture(torch.from_numpy(obs))
+            action_ll[:, 0] = torch.relu(action_ll[:, 0])
+            action_ll = action_ll.cpu().detach().numpy()
+
         # env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * CPG_signal[:, :, step] + action_ll[:, 1][:, np.newaxis]
         env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * CPG_signal[:, :, step]
         env_action[:, [1, 3, 5, 7]] = action_ll[:, 1:]
@@ -181,9 +188,8 @@ else:
 
     # save & plot contact log
     update = 'test'
-    np.savez_compressed(f'contact_plot/contact_{update}.npz', contact=contact_log)
-    contact_plotting(update, contact_log)
-    CPG_and_velocity_plotting(update, max_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
+    contact_plotting(update, task_specific_folder_name, contact_log)
+    CPG_and_velocity_plotting(update, task_specific_folder_name, max_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
 
     env.turn_off_visualization()
     env.reset()

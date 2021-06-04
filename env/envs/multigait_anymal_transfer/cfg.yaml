@@ -45,7 +45,7 @@ environment:
   velocity:
     min: 2.0
     max: 3.0
-  gait: 'trot'
+  gait: 'bound'
   single_velocity: False
 
 architecture:
