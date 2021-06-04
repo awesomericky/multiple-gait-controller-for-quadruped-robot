@@ -352,7 +352,7 @@ namespace raisim
             // const double velErr = std::max((4.0 + costScale_ * 5) * (desired_velocity - bodyLinearVel_[0]), 0.0);
             const double velErr = std::abs(desired_velocity - bodyLinearVel_[0]);
 
-            linvelCost = -700.0 * simulation_dt_ / (exp(10 * velErr) + 2.0 + exp(-10 * velErr)); // ==> min -0.3125
+            linvelCost = -500.0 * ((simulation_dt_ / (exp(velErr) + 2.0 + exp(-velErr))) + (simulation_dt_ / (exp(10 * velErr) + 2.0 + exp(-10 * velErr)))); // ==> min -0.3125
 
             angVelCost = -120.0 * simulation_dt_ / (exp(10 * yawRateError) + 2.0 + exp(-10 * yawRateError)); // ==> min -0.15
             // angVelCost += costScale_ * std::min(0.25 * u_.segment<2>(3).squaredNorm() * simulation_dt_, 0.002) / std::min(0.3 + 3.0 * commandNorm, 1.0);
@@ -380,9 +380,9 @@ namespace raisim
                 else{
                     // in contact
                     slipCost += 1000 * (costScale_ * (0.2 * footContactVel_[i].head(2).norm())) * simulation_dt_;
-                    // if (current_leg_phase[i] == 1)
-                    //     // currently in stance phase ==> should be in contact (increase reward = decrease cost)
-                    //     leg_phase_cost -= 1;
+                    if (current_leg_phase[i] == 1)
+                         // currently in stance phase ==> should be in contact (increase reward = decrease cost)
+                         leg_phase_cost -= 1;
                 }
             }
 
