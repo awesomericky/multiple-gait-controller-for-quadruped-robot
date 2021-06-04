@@ -1,5 +1,7 @@
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
+matplotlib.use('Agg') 
 from os.path import isdir
 from os import makedirs
 
@@ -42,6 +44,7 @@ def joint_angle_plotting(update, folder_name, t_range, CPG_signal, \
 
     plt.legend()
     plt.savefig(f'{final_folder_name}/Thigh_joint_angle_{update}.png')
+    plt.clf()
     plt.close()
 
 
@@ -69,6 +72,7 @@ def joint_angle_plotting(update, folder_name, t_range, CPG_signal, \
 
     plt.legend()
     plt.savefig(f'{final_folder_name}/Calf_joint_angle_{update}.png')
+    plt.clf()
     plt.close()
 
 def contact_plotting(update, folder_name, contact_log):
@@ -92,6 +96,7 @@ def contact_plotting(update, folder_name, contact_log):
     ax.set_title('contact', fontsize=20)
     ax.set_xlabel('time [s]')
     plt.savefig(f'{final_folder_name}/contact_{update}.png')
+    plt.clf()
     plt.close()
 
 def CPG_and_velocity_plotting(update, folder_name, n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj):
@@ -106,4 +111,5 @@ def CPG_and_velocity_plotting(update, folder_name, n_steps, CPG_signal_period_tr
     plt.xlabel('time [s]')
     plt.legend()
     plt.savefig(f'{final_folder_name}/CPG_vel_{update}.png')
+    plt.clf()
     plt.close()

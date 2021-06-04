@@ -118,7 +118,7 @@ saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name
 # logging
 if cfg['logger'] == 'tb':
     tensorboard_launcher(saver.data_dir+"/..")   # press refresh (F5) after the first ppo update
-    pass
+    #pass
 elif cfg['logger'] == 'wandb':
     wandb.init(project='multigait', name='experiment 1', config=dict(cfg))
 
@@ -440,6 +440,7 @@ for update in range(4000):
                 # CPG_ppo.extra_log(CPG_rewards, update * n_steps + step, type='reward')
                 CPG_ppo.extra_log(CPG_signal_period, update * n_steps + step, type='action')
                 CPG_ppo.extra_log(velocity, update * n_steps + step, type='target_veloicty')
+                pass
             
             reward_CPG_sum += np.sum(CPG_rewards)
             CPG_rewards = np.zeros((env.num_envs, 1), dtype=np.float32)
@@ -450,6 +451,7 @@ for update in range(4000):
             env.reward_logging()
             ppo.extra_log(env.reward_log, update * n_steps + step, type='reward')
             ppo.extra_log(action, update * n_steps + step, type='action')
+            # pass
     
     # update CPG policy
     velocity = np.zeros(env.num_envs)[:, np.newaxis].astype(np.float32)
