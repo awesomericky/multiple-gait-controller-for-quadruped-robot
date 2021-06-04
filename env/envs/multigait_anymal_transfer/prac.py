@@ -20,8 +20,9 @@ update = "test"
 start = 200
 total_step = 200
 single_step = 50
+task_name = 'trot_1_2'
 
-contact_log = np.load(f'contact_plot/contact_{update}.npz')['contact']
+contact_log = np.load(f'contact_plot/{task_name}/contact_{update}.npz')['contact']
 contact_log = np.log(contact_log + 1e-6)
 contact_log = contact_log - np.min(contact_log)
 

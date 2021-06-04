@@ -380,9 +380,9 @@ namespace raisim
                 else{
                     // in contact
                     slipCost += 1000 * (costScale_ * (0.2 * footContactVel_[i].head(2).norm())) * simulation_dt_;
-                    if (current_leg_phase[i] == 1)
-                        // currently in stance phase ==> should be in contact (increase reward = decrease cost)
-                        leg_phase_cost -= 1;
+                    // if (current_leg_phase[i] == 1)
+                    //     // currently in stance phase ==> should be in contact (increase reward = decrease cost)
+                    //     leg_phase_cost -= 1;
                 }
             }
 
