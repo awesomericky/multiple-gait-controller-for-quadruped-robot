@@ -352,9 +352,9 @@ namespace raisim
             // const double velErr = std::max((4.0 + costScale_ * 5) * (desired_velocity - bodyLinearVel_[0]), 0.0);
             const double velErr = std::abs(desired_velocity - bodyLinearVel_[0]);
 
-            linvelCost = -500.0 * simulation_dt_ / (exp(velErr) + 2.0 + exp(-velErr)); // ==> min -0.25
+            linvelCost = -700.0 * simulation_dt_ / (exp(10 * velErr) + 2.0 + exp(-10 * velErr)); // ==> min -0.3125
 
-            angVelCost = -120.0 * simulation_dt_ / (exp(yawRateError) + 2.0 + exp(-yawRateError)); // ==> min -0.15
+            angVelCost = -120.0 * simulation_dt_ / (exp(10 * yawRateError) + 2.0 + exp(-10 * yawRateError)); // ==> min -0.15
             // angVelCost += costScale_ * std::min(0.25 * u_.segment<2>(3).squaredNorm() * simulation_dt_, 0.002) / std::min(0.3 + 3.0 * commandNorm, 1.0);
 
             double velLim = 0.0;
