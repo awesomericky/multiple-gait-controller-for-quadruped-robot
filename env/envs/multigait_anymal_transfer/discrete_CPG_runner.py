@@ -67,7 +67,7 @@ if cfg['force_CPU']:
 else:
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-task_specific_folder_name = f"{cfg['environment']['gait']}_{int(cfg['environment']['velocity']['min'])}_{int(cfg['environment']['velocity']['max'])}"
+task_specific_folder_name = f"{cfg['environment']['gait']}_{cfg['environment']['velocity']['min']}_{cfg['environment']['velocity']['max']}"
 
 # create environment from the configuration file
 env = VecEnv(multigait_anymal_transfer.RaisimGymEnv(home_path + "/rsc",
