@@ -7,7 +7,9 @@ import torch
 
 class ConfigurationSaver:
     def __init__(self, log_dir, save_items, task_specific_name):
-        self._data_dir = log_dir + '/' + task_specific_name + '/' + datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        time_dir = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        self._data_dir = log_dir + '/' + task_specific_name + '/' + time_dir
+        self._plot_dir = task_specific_name + '/' + time_dir
         os.makedirs(self._data_dir)
 
         if save_items is not None:
@@ -18,6 +20,10 @@ class ConfigurationSaver:
     @property
     def data_dir(self):
         return self._data_dir
+
+    @property
+    def plot_dir(self):
+        return self._plot_dir
         
 
 def tensorboard_launcher(directory_path):

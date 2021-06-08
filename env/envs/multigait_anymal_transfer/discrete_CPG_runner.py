@@ -80,6 +80,7 @@ ob_dim = env.num_obs  # 26 (w/ HAA joints fixed)
 act_dim = env.num_acts - 3  # 8 - 3 (w/ HAA joints fixed)
 CPG_signal_dim = 1
 CPG_signal_state_dim = 4
+velocity_dim = 1
 
 # Training
 n_CPG_steps = math.floor(cfg['environment']['max_time'] /
@@ -100,16 +101,16 @@ avg_rewards = []
 
 CPG_actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, 1, CPG_signal_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
-                             CPG_signal_dim, 0.1, type='CPG', device=device),
+                             CPG_signal_dim, 0.1, type='fixed', device=device),
                          device)
 CPG_critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['CPG_value_net'], nn.LeakyReLU, 1, 1),
                            device)
 
-actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim),
+actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + velocity_dim + CPG_signal_state_dim, act_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
-                             act_dim, 1.0, device=device),  # 1.0
+                             act_dim, 0.3, device=device, type="fixed"),  # 1.0
                          device)
-critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, 1),
+critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + velocity_dim + CPG_signal_state_dim, 1),
                            device)
 
 saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
@@ -129,7 +130,7 @@ CPG_ppo = PPO.PPO(actor=CPG_actor,
                   num_learning_epochs=4,
                   gamma=0.996,
                   lam=0.95,
-                  num_mini_batches=4,
+                  num_mini_batches=8,
                   PPO_type='CPG',
                   device=device,
                   log_dir=saver.data_dir,
@@ -144,7 +145,7 @@ ppo = PPO.PPO(actor=actor,
               num_learning_epochs=4,
               gamma=0.996,
               lam=0.95,
-              num_mini_batches=4,
+              num_mini_batches=8,
               PPO_type='local',
               device=device,
               log_dir=saver.data_dir,
@@ -217,7 +218,7 @@ CPG_signal_period_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
 target_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
 real_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
 
-for update in range(4000):
+for update in range(10000):
     
     ## Evaluating ##
     if update % cfg['environment']['eval_every_n'] == 0:
@@ -239,7 +240,7 @@ for update in range(4000):
             # we create another graph just to demonstrate the save/load method
             CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, 1, CPG_signal_dim)
             CPG_loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['CPG_actor_architecture_state_dict'])
-            local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim)
+            local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + velocity_dim + CPG_signal_state_dim, act_dim)
             local_loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['actor_architecture_state_dict'])
 
         env.reset()
@@ -304,12 +305,13 @@ for update in range(4000):
             CPG_phase = np.squeeze(CPG_phase)
             assert (0 <= CPG_phase).all() and (CPG_phase <= 1).all(), "CPG_phase not in correct range"
             
-            obs = np.concatenate([obs, CPG_signal_period, CPG_phase], axis=1, dtype=np.float32)
+            obs = np.concatenate([obs, CPG_signal_period, velocity, CPG_phase], axis=1, dtype=np.float32)
 
             with torch.no_grad():
                 if make_new_graph:
                     action_ll = local_loaded_graph.architecture(torch.from_numpy(obs))
                     action_ll[:, 0] = torch.relu(action_ll[:, 0])
+                    #action_ll[:, 1:] = torch.tanh(action_ll[:, 1:])
                     action_ll = action_ll.cpu().detach().numpy()
                 else:
                     action_ll = ppo.inference(obs)
@@ -336,8 +338,8 @@ for update in range(4000):
 
         
         # save & plot contact log
-        contact_plotting(update, task_specific_folder_name, contact_log)
-        CPG_and_velocity_plotting(update, task_specific_folder_name, evaluate_n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
+        contact_plotting(update, saver.plot_dir, contact_log)
+        CPG_and_velocity_plotting(update, saver.plot_dir, evaluate_n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
 
         # env.stop_video_recording()
         # env.turn_off_visualization()
@@ -403,7 +405,7 @@ for update in range(4000):
         CPG_phase = np.squeeze(CPG_phase)
         assert (0 <= CPG_phase).all() and (CPG_phase <= 1).all(), "CPG_phase not in correct range"
         
-        obs = np.concatenate([obs, CPG_signal_period, CPG_phase], axis=1, dtype=np.float32)
+        obs = np.concatenate([obs, CPG_signal_period, velocity, CPG_phase], axis=1, dtype=np.float32)
         action = ppo.observe(obs)
 
         # save joint value for plotting
@@ -467,7 +469,7 @@ for update in range(4000):
     CPG_phase = np.squeeze(CPG_phase)
     assert (0 <= CPG_phase).all() and (CPG_phase <= 1).all(), "CPG_phase not in correct range"
 
-    obs = np.concatenate([obs, CPG_signal_period, CPG_phase], axis=1, dtype=np.float32)
+    obs = np.concatenate([obs, CPG_signal_period, velocity, CPG_phase], axis=1, dtype=np.float32)
     ppo.update(actor_obs=obs, value_obs=obs,
             log_this_iteration=update % 10 == 0, update=update)
     actor.distribution.enforce_minimum_std((torch.ones(act_dim)*0.2).to(device))
@@ -479,7 +481,7 @@ for update in range(4000):
 
     # plot joint value
     if update % 50 == 0:
-        joint_angle_plotting(update, task_specific_folder_name, np.arange(n_steps) * cfg['environment']['control_dt'], CPG_signal[0, :, :n_steps],\
+        joint_angle_plotting(update, saver.plot_dir, np.arange(n_steps) * cfg['environment']['control_dt'], CPG_signal[0, :, :n_steps],\
                                 FR_thigh_joint_history, FL_thigh_joint_history, RR_thigh_joint_history, RL_thigh_joint_history,\
                                 FR_calf_joint_history, FL_calf_joint_history, RR_calf_joint_history, RL_calf_joint_history)
 
