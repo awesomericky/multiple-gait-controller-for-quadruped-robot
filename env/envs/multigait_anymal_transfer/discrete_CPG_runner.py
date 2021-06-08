@@ -97,6 +97,11 @@ assert velocity_period % CPG_period == 0, "velocity_sampling_dt should be intege
 min_vel = cfg['environment']['velocity']['min']
 max_vel = cfg['environment']['velocity']['max']
 
+thigh_min = cfg['joint_limit']['thigh']['min']
+thigh_max = cfg['joint_limit']['thigh']['max']
+calf_min = cfg['joint_limit']['calf']['min']
+calf_max = cfg['joint_limit']['calf']['max']
+
 avg_rewards = []
 
 CPG_actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, 1, CPG_signal_dim),
@@ -310,8 +315,8 @@ for update in range(10000):
             with torch.no_grad():
                 if make_new_graph:
                     action_ll = local_loaded_graph.architecture(torch.from_numpy(obs))
-                    action_ll[:, 0] = torch.clamp(torch.relu(action_ll[:, 0]), min=0., max=1.)
-                    action_ll[:, 1:] = torch.clamp(action_ll[:, 1:], min=-1., max=1.)
+                    action_ll[:, 0] = torch.clamp(torch.relu(action_ll[:, 0]), min=thigh_min, max=thigh_max)
+                    action_ll[:, 1:] = torch.clamp(action_ll[:, 1:], min=calf_min, max=calf_max)
                     action_ll = action_ll.cpu().detach().numpy()
                 else:
                     action_ll = ppo.inference(obs)

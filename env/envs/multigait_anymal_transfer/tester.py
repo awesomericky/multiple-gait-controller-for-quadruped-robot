@@ -46,10 +46,15 @@ ob_dim = env.num_obs  # 26 (w/ HAA joints fixed)
 act_dim = env.num_acts - 3  # 8 - 3 (w/ HAA joints fixed)
 CPG_signal_dim = 1
 CPG_signal_state_dim = 4
-velocity_dim = 0
+velocity_dim = 1
 
 min_vel = cfg['environment']['velocity']['min']
 max_vel = cfg['environment']['velocity']['max']
+
+thigh_min = cfg['joint_limit']['thigh']['min']
+thigh_max = cfg['joint_limit']['thigh']['max']
+calf_min = cfg['joint_limit']['calf']['min']
+calf_max = cfg['joint_limit']['calf']['max']
 
 CPG_period = int(cfg['environment']['CPG_control_dt'] / cfg['environment']['control_dt'])  # 5
 # velocity_period = int(cfg['environment']['velocity_sampling_dt'] / cfg['environment']['control_dt'])  # 200
@@ -152,7 +157,8 @@ else:
 
         with torch.no_grad():
             action_ll = local_loaded_graph.architecture(torch.from_numpy(obs))
-            action_ll[:, 0] = torch.relu(action_ll[:, 0])
+            action_ll[:, 0] = torch.clamp(torch.relu(action_ll[:, 0]), min=thigh_min, max=thigh_max)
+            action_ll[:, 1:] = torch.clamp(action_ll[:, 1:], min=calf_min, max=calf_max)
             action_ll = action_ll.cpu().detach().numpy()
 
         # env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * CPG_signal[:, :, step] + action_ll[:, 1][:, np.newaxis]
