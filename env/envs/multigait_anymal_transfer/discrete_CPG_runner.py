@@ -108,7 +108,7 @@ CPG_critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['CPG_value_net
 
 actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + velocity_dim + CPG_signal_state_dim, act_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
-                             act_dim, 0.3, device=device, type="fixed"),  # 1.0
+                             act_dim, 1.0, device=device),  # 1.0
                          device)
 critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + velocity_dim + CPG_signal_state_dim, 1),
                            device)
@@ -130,7 +130,7 @@ CPG_ppo = PPO.PPO(actor=CPG_actor,
                   num_learning_epochs=4,
                   gamma=0.996,
                   lam=0.95,
-                  num_mini_batches=8,
+                  num_mini_batches=32,
                   PPO_type='CPG',
                   device=device,
                   log_dir=saver.data_dir,
@@ -145,7 +145,7 @@ ppo = PPO.PPO(actor=actor,
               num_learning_epochs=4,
               gamma=0.996,
               lam=0.95,
-              num_mini_batches=8,
+              num_mini_batches=32,
               PPO_type='local',
               device=device,
               log_dir=saver.data_dir,
@@ -310,8 +310,8 @@ for update in range(10000):
             with torch.no_grad():
                 if make_new_graph:
                     action_ll = local_loaded_graph.architecture(torch.from_numpy(obs))
-                    action_ll[:, 0] = torch.relu(action_ll[:, 0])
-                    #action_ll[:, 1:] = torch.tanh(action_ll[:, 1:])
+                    action_ll[:, 0] = torch.clamp(torch.relu(action_ll[:, 0]), min=0., max=1.)
+                    action_ll[:, 1:] = torch.clamp(action_ll[:, 1:], min=-1., max=1.)
                     action_ll = action_ll.cpu().detach().numpy()
                 else:
                     action_ll = ppo.inference(obs)

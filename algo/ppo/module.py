@@ -28,16 +28,16 @@ class Actor:
 
         elif PPO_type == 'local' or PPO_type == None:
             logits = self.architecture.architecture(obs)
-            logits[:, 0] = torch.relu(logits[:, 0])  # clipping amplitude (Architecture 5)
-            # logits[:, 1:] = torch.tanh(logits[:, 1:])  # tanh
-            # logits[:, 1:] = torch.clamp(logits[:, 1:], min=-1., max=1.)  # clipping shaft & calf (Architecture 5)
+            # logits[:, 0] = torch.relu(logits[:, 0])  # clipping amplitude (Architecture 5)
+            logits[:, 0] = torch.clamp(torch.relu(logits[:, 0]), min=0., max=1.)  # clipping amplitude (Architecture 5)
+            logits[:, 1:] = torch.clamp(logits[:, 1:], min=-1., max=1.)  # clipping shaft & calf (Architecture 5)
             actions, log_prob = self.distribution.sample(logits)
             # actions[:, :4] = F.relu(actions[:, :4])  # clipping amplitude (Architecture 4)
 
             ## For real action ##
-            actions[:, 0] = torch.relu(actions[:, 0])  # clipping amplitude (Architecture 5)
-            # actions[:, 1:] = torch.tanh(actions[:, 1:])
-            # actions[:, 1:] = torch.clamp(actions[:, 1:], min=-1., max=1.)
+            # actions[:, 0] = torch.relu(actions[:, 0])  # clipping amplitude (Architecture 5)
+            actions[:, 0] = torch.clamp(torch.relu(actions[:, 0]), min=0., max=1.)  # clipping amplitude (Architecture 5)
+            actions[:, 1:] = torch.clamp(actions[:, 1:], min=-1., max=1.)
             # actions[:, 1:] = torch.tanh(actions[:, 1:])
             # actions[:, 2:] = torch.clamp(actions[:, 2:], min=-1, max=1)
             return actions.cpu().detach(), log_prob.cpu().detach()
@@ -60,8 +60,9 @@ class Actor:
             return action_mean.cpu().detach()
         elif PPO_type == 'local' or PPO_type == None:
             action_mean = self.architecture.architecture(obs)
-            action_mean[:, 0] = torch.relu(action_mean[:, 0])  # clipping amplitude (Architecture 5)
-            # action_mean[:, 1:] = torch.tanh(action_mean[:, 1:])
+            # action_mean[:, 0] = torch.relu(action_mean[:, 0])  # clipping amplitude (Architecture 5)
+            action_mean[:, 0] = torch.clamp(torch.relu(action_mean[:, 0]), min=0., max=1.)  # clipping amplitude (Architecture 5)
+            action_mean[:, 1:] = torch.clamp(action_mean[:, 1:], min=-1., max=1.)
             return action_mean.cpu().detach()
         
 
