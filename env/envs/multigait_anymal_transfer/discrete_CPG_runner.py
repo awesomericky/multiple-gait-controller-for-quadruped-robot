@@ -114,7 +114,7 @@ CPG_critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['CPG_value_net
 actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + velocity_dim + CPG_signal_state_dim, act_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
                              act_dim, 1.0, device=device),  # 1.0
-                         device)
+                         device, joint_limit=cfg['joint_limit'])
 critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + velocity_dim + CPG_signal_state_dim, 1),
                            device)
 

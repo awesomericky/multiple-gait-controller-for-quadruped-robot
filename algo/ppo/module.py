@@ -16,10 +16,10 @@ class Actor:
         self.device = device
         self.joint_limit = joint_limit
         if self.joint_limit != None:
-            self.thigh_min = self.joint_limit['thigh_min']
-            self.thigh_max = self.joint_limit['thigh_max']
-            self.calf_min = self.joint_limit['calf_min']
-            self.calf_max = self.joint_limit['calf_max']
+            self.thigh_min = self.joint_limit['thigh']['min']
+            self.thigh_max = self.joint_limit['thigh']['max']
+            self.calf_min = self.joint_limit['calf']['min']
+            self.calf_max = self.joint_limit['calf']['max']
 
     def sample(self, obs, PPO_type):
         if PPO_type == 'CPG':
