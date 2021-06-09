@@ -217,7 +217,10 @@ CPG_signal_period_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
 target_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
 real_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
 
-iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
+if weight_path != '':
+    iteration_number = int(weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0])
+else:
+    iteration_number = 0
 
 for update in range(iteration_number, 10000):
     
@@ -487,7 +490,7 @@ for update in range(iteration_number, 10000):
 
     end = time.time()
 
-    # # increase cost (curriculum learning)
+    # increase cost (curriculum learning)
     env.increase_cost_scale()
 
     print('----------------------------------------------------')
