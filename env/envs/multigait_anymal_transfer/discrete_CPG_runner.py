@@ -239,7 +239,7 @@ for update in range(10000):
             # we create another graph just to demonstrate the save/load method
             CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], nn.LeakyReLU, 1, CPG_signal_dim)
             CPG_loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['CPG_actor_architecture_state_dict'])
-            local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + velocity_dim + CPG_signal_state_dim, act_dim)
+            local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim)
             local_loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['actor_architecture_state_dict'])
 
         env.reset()
@@ -486,7 +486,7 @@ for update in range(10000):
     end = time.time()
 
     # # increase cost (curriculum learning)
-    # env.increase_cost_scale()
+    env.increase_cost_scale()
 
     print('----------------------------------------------------')
     print('{:>6}th iteration'.format(update))

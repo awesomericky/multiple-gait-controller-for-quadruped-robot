@@ -83,7 +83,7 @@ class RolloutStorage:
             self.rewards /= torch.std(self.rewards, axis=1).unsqueeze(1)
 
     def compute_returns(self, last_values, gamma, lam):
-        self.reward_normalize()  # normalize reward
+        # self.reward_normalize()  # normalize reward
 
         advantage = 0
         for step in reversed(range(self.num_transitions_per_env)):
