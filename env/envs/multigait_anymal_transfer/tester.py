@@ -51,10 +51,10 @@ velocity_dim = 1
 min_vel = cfg['environment']['velocity']['min']
 max_vel = cfg['environment']['velocity']['max']
 
-thigh_min = cfg['joint_limit']['thigh']['min']
-thigh_max = cfg['joint_limit']['thigh']['max']
-calf_min = cfg['joint_limit']['calf']['min']
-calf_max = cfg['joint_limit']['calf']['max']
+thigh_min = cfg['environment']['joint_limit']['thigh']['min']
+thigh_max = cfg['environment']['joint_limit']['thigh']['max']
+calf_min = cfg['environment']['joint_limit']['calf']['min']
+calf_max = cfg['environment']['joint_limit']['calf']['max']
 
 CPG_period = int(cfg['environment']['CPG_control_dt'] / cfg['environment']['control_dt'])  # 5
 # velocity_period = int(cfg['environment']['velocity_sampling_dt'] / cfg['environment']['control_dt'])  # 200
