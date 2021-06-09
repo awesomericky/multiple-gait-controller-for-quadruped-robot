@@ -2,7 +2,7 @@ from numpy.lib.type_check import real_if_close
 from ruamel.yaml import YAML, dump, RoundTripDumper
 from raisimGymTorch.env.bin import multigait_anymal_transfer
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
-from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver, load_param, tensorboard_launcher
+from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver, load_param, tensorboard_launcher, hierarchical_load_param
 from raisimGymTorch.helper.utils import joint_angle_plotting, contact_plotting, CPG_and_velocity_plotting
 import os
 import math
@@ -153,11 +153,8 @@ ppo = PPO.PPO(actor=actor,
               )
 
 if mode == 'retrain':
-    load_param(weight_path, env, CPG_actor, CPG_critic, CPG_ppo.optimizer, saver.data_dir, type='CPG')
-    load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir, type='local')
-    iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
-    weight_dir = weight_path.rsplit('/', 1)[0] + '/'
-    env.load_scaling(weight_dir, int(iteration_number))
+    hierarchical_load_param(weight_path, env, CPG_actor, CPG_critic, CPG_ppo.optimizer, \
+                            actor, critic, ppo.optimizer, saver.data_dir)
 
 """
 [Joint order]
@@ -219,6 +216,8 @@ contact_log = np.zeros((4, evaluate_n_steps), dtype=np.float32) # 0: FR, 1: FL, 
 CPG_signal_period_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
 target_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
 real_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
+
+iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
 
 for update in range(iteration_number, 10000):
     
