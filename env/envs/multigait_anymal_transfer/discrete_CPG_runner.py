@@ -155,6 +155,9 @@ ppo = PPO.PPO(actor=actor,
 if mode == 'retrain':
     load_param(weight_path, env, CPG_actor, CPG_critic, CPG_ppo.optimizer, saver.data_dir, type='CPG')
     load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir, type='local')
+    iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
+    weight_dir = weight_path.rsplit('/', 1)[0] + '/'
+    env.load_scaling(weight_dir, int(iteration_number))
 
 """
 [Joint order]
@@ -217,7 +220,7 @@ CPG_signal_period_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
 target_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
 real_velocity_traj = np.zeros((evaluate_n_steps, ), dtype=np.float32)
 
-for update in range(10000):
+for update in range(iteration_number, 10000):
     
     ## Evaluating ##
     if update % cfg['environment']['eval_every_n'] == 0:
