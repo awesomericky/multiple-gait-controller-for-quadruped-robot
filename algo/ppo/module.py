@@ -33,15 +33,13 @@ class Actor:
         elif PPO_type == 'local' or PPO_type == None:
             logits = self.architecture.architecture(obs)
             # logits[:, 0] = torch.relu(logits[:, 0])  # clipping amplitude (Architecture 5)
-            logits[:, 0] = torch.clamp(torch.relu(logits[:, 0]), min=self.thigh_min, max=self.thigh_max)  # clipping amplitude (Architecture 5)
-            logits[:, 1:] = torch.clamp(logits[:, 1:], min=self.calf_min, max=self.calf_max)  # clipping shaft & calf (Architecture 5)
+            logits[:, 0] = torch.relu(logits[:, 0])  # clipping amplitude (Architecture 5)
             actions, log_prob = self.distribution.sample(logits)
             # actions[:, :4] = F.relu(actions[:, :4])  # clipping amplitude (Architecture 4)
 
             ## For real action ##
             # actions[:, 0] = torch.relu(actions[:, 0])  # clipping amplitude (Architecture 5)
-            actions[:, 0] = torch.clamp(torch.relu(actions[:, 0]), min=self.thigh_min, max=self.thigh_max)  # clipping amplitude (Architecture 5)
-            actions[:, 1:] = torch.clamp(actions[:, 1:], min=self.calf_min, max=self.calf_max)
+            actions[:, 0] = torch.relu(actions[:, 0])  # clipping amplitude (Architecture 5)
             return actions.cpu().detach(), log_prob.cpu().detach()
 
     def evaluate(self, obs, actions, PPO_type):
@@ -61,8 +59,7 @@ class Actor:
         elif PPO_type == 'local' or PPO_type == None:
             action_mean = self.architecture.architecture(obs)
             # action_mean[:, 0] = torch.relu(action_mean[:, 0])  # clipping amplitude (Architecture 5)
-            action_mean[:, 0] = torch.clamp(torch.relu(action_mean[:, 0]), min=self.thigh_min, max=self.thigh_max)  # clipping amplitude (Architecture 5)
-            action_mean[:, 1:] = torch.clamp(action_mean[:, 1:], min=self.calf_min, max=self.calf_max)
+            action_mean[:, 0] = torch.relu(action_mean[:, 0])  # clipping amplitude (Architecture 5)
             return action_mean.cpu().detach()
         
 

@@ -46,15 +46,9 @@ ob_dim = env.num_obs  # 26 (w/ HAA joints fixed)
 act_dim = env.num_acts - 3  # 8 - 3 (w/ HAA joints fixed)
 CPG_signal_dim = 1
 CPG_signal_state_dim = 4
-velocity_dim = 1
 
 min_vel = cfg['environment']['velocity']['min']
 max_vel = cfg['environment']['velocity']['max']
-
-thigh_min = cfg['environment']['joint_limit']['thigh']['min']
-thigh_max = cfg['environment']['joint_limit']['thigh']['max']
-calf_min = cfg['environment']['joint_limit']['calf']['min']
-calf_max = cfg['environment']['joint_limit']['calf']['max']
 
 CPG_period = int(cfg['environment']['CPG_control_dt'] / cfg['environment']['control_dt'])  # 5
 # velocity_period = int(cfg['environment']['velocity_sampling_dt'] / cfg['environment']['control_dt'])  # 200
@@ -81,7 +75,7 @@ else:
     print("Visualizing and evaluating the policy: ", weight_path)
     CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], torch.nn.LeakyReLU, 1, CPG_signal_dim)
     CPG_loaded_graph.load_state_dict(torch.load(weight_path, map_location=torch.device('cpu'))['CPG_actor_architecture_state_dict'])
-    local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], torch.nn.LeakyReLU, ob_dim + CPG_signal_dim + velocity_dim + CPG_signal_state_dim, act_dim)
+    local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], torch.nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim)
     local_loaded_graph.load_state_dict(torch.load(weight_path, map_location=torch.device('cpu'))['actor_architecture_state_dict'])
 
     env.load_scaling(weight_dir, int(iteration_number))
@@ -153,12 +147,11 @@ else:
         CPG_phase = np.squeeze(CPG_phase)
         assert (0 <= CPG_phase).all() and (CPG_phase <= 1).all(), "CPG_phase not in correct range"
         
-        obs = np.concatenate([obs, CPG_signal_period, velocity, CPG_phase], axis=1, dtype=np.float32)
+        obs = np.concatenate([obs, CPG_signal_period, CPG_phase], axis=1, dtype=np.float32)
 
         with torch.no_grad():
             action_ll = local_loaded_graph.architecture(torch.from_numpy(obs))
-            action_ll[:, 0] = torch.clamp(torch.relu(action_ll[:, 0]), min=thigh_min, max=thigh_max)
-            action_ll[:, 1:] = torch.clamp(action_ll[:, 1:], min=calf_min, max=calf_max)
+            action_ll[:, 0] = torch.relu(action_ll[:, 0])
             action_ll = action_ll.cpu().detach().numpy()
 
         # env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * CPG_signal[:, :, step] + action_ll[:, 1][:, np.newaxis]
