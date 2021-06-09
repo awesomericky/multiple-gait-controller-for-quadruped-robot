@@ -6,7 +6,7 @@ environment:
 # just testing commenting
   num_envs: 100 # 100
   eval_every_n: 100
-  num_threads: 30
+  num_threads: 50
   simulation_dt: 0.0025
   CPG_control_dt: 0.05
   control_dt: 0.01
@@ -48,10 +48,10 @@ environment:
   joint_limit:
     thigh:
       min: 0.0
-      max: 1.0
+      max: 2.0
     calf:
-      min: -1.
-      max: 1.
+      min: -2.
+      max: 2.
   gait: 'trot'
   single_velocity: False
 

@@ -109,8 +109,8 @@ class PPO:
         if self.PPO_type == 'local' or self.PPO_type == None:
             last_values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
         elif self.PPO_type == 'CPG':
-            last_values = torch.zeros((value_obs.shape[0], 1))
-            # last_values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
+            # last_values = torch.zeros((value_obs.shape[0], 1))
+            last_values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
 
         # Add auxilary reward for each step
         # self.storage.add_auxiliary_reward(auxilory_value)

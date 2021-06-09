@@ -97,10 +97,10 @@ assert velocity_period % CPG_period == 0, "velocity_sampling_dt should be intege
 min_vel = cfg['environment']['velocity']['min']
 max_vel = cfg['environment']['velocity']['max']
 
-thigh_min = cfg['joint_limit']['thigh']['min']
-thigh_max = cfg['joint_limit']['thigh']['max']
-calf_min = cfg['joint_limit']['calf']['min']
-calf_max = cfg['joint_limit']['calf']['max']
+thigh_min = cfg['environment']['joint_limit']['thigh']['min']
+thigh_max = cfg['environment']['joint_limit']['thigh']['max']
+calf_min = cfg['environment']['joint_limit']['calf']['min']
+calf_max = cfg['environment']['joint_limit']['calf']['max']
 
 avg_rewards = []
 
@@ -113,8 +113,8 @@ CPG_critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['CPG_value_net
 
 actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + velocity_dim + CPG_signal_state_dim, act_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(
-                             act_dim, 1.0, device=device),  # 1.0
-                         device, joint_limit=cfg['joint_limit'])
+                             act_dim, 0.31, type='fixed', device=device),  # 1.0
+                         device, joint_limit=cfg['environment']['joint_limit'])
 critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim + CPG_signal_dim + velocity_dim + CPG_signal_state_dim, 1),
                            device)
 
@@ -135,7 +135,7 @@ CPG_ppo = PPO.PPO(actor=CPG_actor,
                   num_learning_epochs=4,
                   gamma=0.996,
                   lam=0.95,
-                  num_mini_batches=32,
+                  num_mini_batches=8,
                   PPO_type='CPG',
                   device=device,
                   log_dir=saver.data_dir,
@@ -150,7 +150,7 @@ ppo = PPO.PPO(actor=actor,
               num_learning_epochs=4,
               gamma=0.996,
               lam=0.95,
-              num_mini_batches=32,
+              num_mini_batches=8,
               PPO_type='local',
               device=device,
               log_dir=saver.data_dir,
