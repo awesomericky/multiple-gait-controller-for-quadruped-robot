@@ -38,14 +38,14 @@ environment:
     orientation:
       coeff: 1.
     leg_phase:
-      coeff: 1.
+      coeff: 3.
     height:
       threshold: 0.07 # penalty only given if the height is out of threhold
       coeff: 0.0 #0.3
   velocity:
     min: 0.1
     max: 1.5
-  gait: 'trot'
+    gait: 'hierarchy'
   single_velocity: False
 
 architecture:

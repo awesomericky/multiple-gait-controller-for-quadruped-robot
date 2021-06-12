@@ -28,6 +28,8 @@ class RaisimGymVecEnv:
         self.rewards = [[] for _ in range(self.num_envs)]
         self.reward_log = np.zeros([self.num_envs, cfg["n_reward"]], dtype=np.float32)
         self.contact_log = np.zeros([self.num_envs, 4], dtype=np.float32)
+        self.torque_data = np.zeros(self.num_envs, dtype=np.float32)
+        self.power_data = np.zeros(self.num_envs, dtype=np.float32)
 
         # logging
         self.update_count = 0
@@ -129,6 +131,14 @@ class RaisimGymVecEnv:
     
     def set_next_initialize_steps(self, next_initialize_steps):
         self.wrapper.set_next_initialize_steps(next_initialize_steps)
+    
+    def get_torque(self):
+        self.wrapper.get_torque(self.torque_data)
+        return self.torque_data
+    
+    def get_power(self):
+        self.wrapper.get_power(self.power_data)
+        return self.power_data
 
     @property
     def num_envs(self):

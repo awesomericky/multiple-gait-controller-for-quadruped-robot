@@ -1,8 +1,8 @@
 from ruamel.yaml import YAML, dump, RoundTripDumper, tokens
-from raisimGymTorch.env.bin import multigait_anymal_transfer_2
+from raisimGymTorch.env.bin import multigait_anymal_transfer
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
 import raisimGymTorch.algo.ppo.module as ppo_module
-from raisimGymTorch.helper.utils import contact_plotting, CPG_and_velocity_plotting
+from raisimGymTorch.helper.utils import exp_contact_plotting, exp_CPG_and_velocity_plotting
 import os
 import math
 import time
@@ -11,6 +11,7 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import pdb
+import pickle
 
 
 # configuration
@@ -20,6 +21,29 @@ import pdb
 
 def sin(x, a, b):
     return np.sin(a*x + b)
+
+target_gait_dict = np.array([[np.pi, 0, 0, np.pi], [np.pi, 0, np.pi, 0], [np.pi, np.pi, 0, 0]])
+# 0 : trot, 1: pace, 2: bound
+
+# target_gait_dict = np.array([[0, np.pi, 1.5 * np.pi, 0.5 * np.pi], [0, np.pi, 0, np.pi], [0, 0, np.pi, np.pi]])
+# # 0 : walk, 1: pace, 2: bound
+
+def compute_target_gait_phase(velocity):
+    """
+    Input:
+        velocity: (num_envs, 1)
+    Output:
+        target_phase: (num_envs, 4)
+    """
+    velocity = np.squeeze(velocity)
+    phase_idx = np.where(velocity < 0.5, 0, 1)
+    phase_idx += np.where(velocity < 1.0, 0, 1)
+    target_phase = target_gait_dict[phase_idx, :]
+
+    gait_encoding = np.zeros((phase_idx.size, target_gait_dict.shape[0]))
+    gait_encoding[np.arange(phase_idx.size), phase_idx] = 1
+    target_phase = target_gait_dict[phase_idx, :]
+    return target_phase, gait_encoding
 
 
 parser = argparse.ArgumentParser()
@@ -39,23 +63,21 @@ cfg = YAML().load(open(os.path.join(weight_path.rsplit('/', 1)[0], 'cfg.yaml'), 
 training_num_envs = cfg['environment']['num_envs']
 cfg['environment']['num_envs'] = 1
 
-env = VecEnv(multigait_anymal_transfer_2.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
+env = VecEnv(multigait_anymal_transfer.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
 
 # shortcuts
 ob_dim = env.num_obs  # 26 (w/ HAA joints fixed)
 act_dim = env.num_acts - 3  # 8 - 3 (w/ HAA joints fixed)
 CPG_signal_dim = 1
 CPG_signal_state_dim = 4
+gait_encoding_dim = 3
 
 min_vel = cfg['environment']['velocity']['min']
 max_vel = cfg['environment']['velocity']['max']
 
 CPG_period = int(cfg['environment']['CPG_control_dt'] / cfg['environment']['control_dt'])  # 5
-# velocity_period = int(cfg['environment']['velocity_sampling_dt'] / cfg['environment']['control_dt'])  # 200
-velocity_period = 300  # sample velocity every 3 sec
-
-target_gait_dict = {'pace': [np.pi, 0, np.pi, 0], 'trot': [np.pi, 0, 0, np.pi], 'bound': [np.pi, np.pi, 0, 0]}
-target_gait_phase = np.array(target_gait_dict[cfg['environment']['gait']])
+wait_period = 200
+velocity_period = 500
 
 iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
 weight_dir = weight_path.rsplit('/', 1)[0] + '/'
@@ -75,23 +97,18 @@ else:
     print("Visualizing and evaluating the policy: ", weight_path)
     CPG_loaded_graph = ppo_module.MLP(cfg['architecture']['CPG_policy_net'], torch.nn.LeakyReLU, 1, CPG_signal_dim)
     CPG_loaded_graph.load_state_dict(torch.load(weight_path, map_location=torch.device('cpu'))['CPG_actor_architecture_state_dict'])
-    local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], torch.nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim, act_dim)
+    local_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], torch.nn.LeakyReLU, ob_dim + CPG_signal_dim + CPG_signal_state_dim + gait_encoding_dim, act_dim)
     local_loaded_graph.load_state_dict(torch.load(weight_path, map_location=torch.device('cpu'))['actor_architecture_state_dict'])
 
     env.load_scaling(weight_dir, int(iteration_number))
     env.turn_on_visualization()
 
     # max_steps = 1000000
-    max_steps = 1500 ## 12 secs
+    max_steps = 2500 ## 12 secs
 
-    assert max_steps / velocity_period == 5.0, "Check velocity period"
     count = 0
 
     # initialize value
-    CPG_a_new = np.zeros((training_num_envs, 1))
-    CPG_b_new = np.broadcast_to(target_gait_phase[:, np.newaxis], (training_num_envs, 4, 1))
-    CPG_a_old = np.zeros((training_num_envs, 1))
-    CPG_b_old = np.broadcast_to(target_gait_phase[:, np.newaxis], (training_num_envs, 4, 1))
     CPG_signal = np.zeros((training_num_envs, 4, max_steps), dtype=np.float32)
     env_action = np.zeros((training_num_envs, 8), dtype=np.float32)
 
@@ -101,28 +118,46 @@ else:
     target_velocity_traj = np.zeros((max_steps, ), dtype=np.float32)
     real_velocity_traj = np.zeros((max_steps, ), dtype=np.float32)
 
+    # initialize exp2 data
+    velocity_error_collection = dict()
+    torque_collection = []
+    power_collection = []
+
     for step in range(max_steps):
         frame_start = time.time()
 
         if step % CPG_period == 0:
             if step % velocity_period == 0:
-                # sample new velocity
-                # normalized_velocity = np.broadcast_to(np.random.uniform(low = 0, high=1, size=1)[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
-                # normalized_velocity = np.broadcast_to(np.array([0])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                data_collection_start = step + wait_period
+                velocity_error = []
+
                 if count == 0:
-                    normalized_velocity = np.broadcast_to(np.array([0])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                    velocity = np.broadcast_to(np.array([0.3])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
                 elif count == 1:
-                    normalized_velocity = np.broadcast_to(np.array([0.25])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                    velocity = np.broadcast_to(np.array([0.6])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
                 elif count == 2:
-                    normalized_velocity = np.broadcast_to(np.array([0.5])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                    velocity = np.broadcast_to(np.array([0.9])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
                 elif count == 3:
-                    normalized_velocity = np.broadcast_to(np.array([0.75])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                    velocity = np.broadcast_to(np.array([1.2])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
                 else:
-                    normalized_velocity = np.broadcast_to(np.array([1])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
-                velocity = normalized_velocity * (max_vel - min_vel) + min_vel
+                    velocity = np.broadcast_to(np.array([1.5])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
 
                 env.set_target_velocity(velocity)
                 count += 1
+
+                if step == 0:
+                    # initialize value
+                    target_gait_phase, gait_encoding = compute_target_gait_phase(velocity)
+                    previous_gait_phase = target_gait_phase.copy()
+                    CPG_a_new = np.zeros((env.num_envs, 1))
+                    CPG_b_new = target_gait_phase[:, :, np.newaxis]
+                    CPG_a_old = np.zeros((env.num_envs, 1))
+                    CPG_b_old = target_gait_phase[:, :, np.newaxis]
+                else:
+                    # update value
+                    target_gait_phase, gait_encoding = compute_target_gait_phase(velocity)
+                    CPG_b_extra = target_gait_phase[:, :, np.newaxis] - previous_gait_phase[:, :, np.newaxis]
+                    previous_gait_phase = target_gait_phase.copy()
             
             # generate new CPG signal parameter
             CPG_a_old = CPG_a_new.copy()
@@ -132,7 +167,10 @@ else:
                 CPG_signal_period = torch.clamp(CPG_signal_period, min=0.1, max=1.0).cpu().detach().numpy()
 
             CPG_a_new = 2 * np.pi / (CPG_signal_period + 1e-6)
-            CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old
+            if (step % velocity_period == 0) and (step != 0):
+                CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old + CPG_b_extra
+            else:
+                CPG_b_new = ((CPG_a_old - CPG_a_new) * (step * cfg['environment']['control_dt']))[:, np.newaxis, :] + CPG_b_old
 
             # generate CPG signal
             t_period = CPG_period
@@ -147,7 +185,7 @@ else:
         CPG_phase = np.squeeze(CPG_phase)
         assert (0 <= CPG_phase).all() and (CPG_phase <= 1).all(), "CPG_phase not in correct range"
         
-        obs = np.concatenate([obs, CPG_signal_period, CPG_phase], axis=1, dtype=np.float32)
+        obs = np.concatenate([obs, CPG_signal_period, CPG_phase, gait_encoding], axis=1, dtype=np.float32)
 
         with torch.no_grad():
             action_ll = local_loaded_graph.architecture(torch.from_numpy(obs))
@@ -162,9 +200,21 @@ else:
         wait_time = cfg['environment']['control_dt'] - (frame_end-frame_start)
         if wait_time > 0.:
             time.sleep(wait_time)
-        
-        reward_ll_sum += reward_ll[0]
-        done_sum += dones[0]
+
+        if step in range(data_collection_start, data_collection_start + (velocity_period - wait_period)):
+            real_velocity = non_obs[0, 12]
+            desired_velocity = velocity[0, 0]
+
+            velocity_error.append(abs(real_velocity - desired_velocity))
+
+            current_torque = env.get_torque()[0]
+            current_power = env.get_power()[0]
+            torque_collection.append([real_velocity, current_torque])
+            power_collection.append([real_velocity, current_power])
+
+            if step == data_collection_start + (velocity_period - wait_period) - 1:
+                velocity_error = np.asarray(velocity_error)
+                velocity_error_collection[desired_velocity] = [np.mean(velocity_error), np.std(velocity_error), np.quantile(velocity_error, .25), np.quantile(velocity_error, .50), np.quantile(velocity_error, .75)]
         
         # contact logging
         env.contact_logging()
@@ -174,20 +224,19 @@ else:
         CPG_signal_period_traj[step] = CPG_signal_period[0]
         target_velocity_traj[step] = velocity[0]
         real_velocity_traj[step] = non_obs[0, 12]
-        
-        if dones or step == max_steps - 1:
-            print('----------------------------------------------------')
-            print('{:<40} {:>6}'.format("average ll reward: ", '{:0.10f}'.format(reward_ll_sum / (step + 1 - start_step_id))))
-            print('{:<40} {:>6}'.format("time elapsed [sec]: ", '{:6.4f}'.format((step + 1 - start_step_id) * cfg['environment']['control_dt'])))
-            print('----------------------------------------------------\n')
-            start_step_id = step + 1
-            reward_ll_sum = 0.0
     
+    # save exp2 data
+    torque_collection = np.asarray(torque_collection)
+    power_collection = np.asarray(power_collection)
+    with open(f"raisimGymTorch/exp_result/exp2/vel_error_{cfg['environment']['gait']}.pkl", "wb") as f:
+        pickle.dump(velocity_error_collection, f)
+    np.savez_compressed(f"raisimGymTorch/exp_result/exp2/torque_{cfg['environment']['gait']}", torque=torque_collection)
+    np.savez_compressed(f"raisimGymTorch/exp_result/exp2/power_{cfg['environment']['gait']}", power=power_collection)
 
     # save & plot contact log
-    update = 'test'
-    contact_plotting(update, task_specific_folder_name, contact_log)
-    CPG_and_velocity_plotting(update, task_specific_folder_name, max_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
+    update = cfg['environment']['gait']
+    exp_contact_plotting(update, "raisimGymTorch/exp_result/exp2", contact_log)
+    exp_CPG_and_velocity_plotting(update, "raisimGymTorch/exp_result/exp2", max_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
 
     env.turn_off_visualization()
     env.reset()

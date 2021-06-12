@@ -20,7 +20,7 @@ update = "test"
 start = 200
 total_step = 200
 single_step = 50
-task_name = 'trot_1_2'
+task_name = 'baseline_0.1_1.5'
 
 contact_log = np.load(f'contact_plot/{task_name}/contact_{update}.npz')['contact']
 contact_log = np.log(contact_log + 1e-6)

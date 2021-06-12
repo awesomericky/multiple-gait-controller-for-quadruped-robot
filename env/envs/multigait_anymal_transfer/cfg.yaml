@@ -22,7 +22,7 @@ environment:
     joint_torque:
       coeff: 1.
     linear_vel_error:
-      coeff: 0.5
+      coeff: 1.
     angular_vel_error:
       coeff: 1.
     foot_clearance:
@@ -38,14 +38,14 @@ environment:
     orientation:
       coeff: 1.
     leg_phase:
-      coeff: 1.
+      coeff: 0.
     height:
       threshold: 0.07 # penalty only given if the height is out of threhold
       coeff: 0.0 #0.3
   velocity:
     min: 0.1
     max: 1.5
-  gait: 'trot'
+  gait: 'baseline'
   single_velocity: False
 
 architecture:

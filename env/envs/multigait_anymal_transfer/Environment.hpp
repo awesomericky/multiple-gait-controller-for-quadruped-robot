@@ -428,6 +428,16 @@ namespace raisim
             return false;
         }
 
+        void get_torque(Eigen::Ref<EigenVec> torque_data)
+        {
+            torque_data[0] = torque.tail(8).norm();
+        }
+
+        void get_power(Eigen::Ref<EigenVec> power_data)
+        {
+            power_data[0] = ((gv_.tail(8) * torque.tail(8)).array().abs() * control_dt_).sum();
+        }
+
         void increase_cost_scale() {
             costScale_ = std::pow(costScale_, 0.997);
         }

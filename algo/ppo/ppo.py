@@ -173,19 +173,6 @@ class PPO:
                     self.writer.add_scalar('Local/Reward/leg_phase/mean', np.mean(log_value[:, 9]), step)
                     self.writer.add_scalar('Local/Reward/height/mean', np.mean(log_value[:, 10]), step)
                     self.writer.add_scalar('Local/cost_scale/mean', np.mean(log_value[:, 11]), step)
-
-                    # self.writer.add_scalar('Local/Reward/torque/mean', np.mean(log_value[:, 0]), step)
-                    # self.writer.add_scalar('Reward/torque/std', np.std(log_value[:, 0]), step)
-                    # self.writer.add_scalar('Local/Reward/velocity/mean', np.mean(log_value[:, 1]), step)
-                    # self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
-                    # self.writer.add_scalar('Local/Reward/height/mean', np.mean(log_value[:, 2]), step)
-                    # self.writer.add_scalar('Local/Reward/orientation/mean', np.mean(log_value[:, 3]), step)
-                    # self.writer.add_scalar('CPG/Reward/GRF_entropy/mean', np.mean(log_value[:, 4]), step)
-                    # self.writer.add_scalar('Reward/LegWorkEntropy/mean', np.mean(log_value[:, 4]), step)
-                    # self.writer.add_scalar('Reward/uncontactPenalty/mean', np.mean(log_value[:, 5]), step)
-                    # self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 4]), step)
-                    # self.writer.add_scalar('Reward/GRF_entropy/std', np.std(log_value[:, 2]), step)
-                    # self.writer.add_scalar('Reward/impulse/mean', np.mean(log_value[:, 5]), step)
                 elif type == 'action':
                     # Architecture 5
                     self.writer.add_scalar('Local/CPG_tranform/Thigh_amplitude/mean', np.mean(log_value[:, 0]), step)
@@ -195,50 +182,28 @@ class PPO:
                     self.writer.add_scalar('Local/CPG_tranform/RL_calf/mean', np.mean(log_value[:, 4]), step)
             else:
                 if type == 'reward':
-                    self.writer.add_scalar('Reward/torque/mean', np.mean(log_value[:, 0]), step)
-                    # self.writer.add_scalar('Reward/torque/std', np.std(log_value[:, 0]), step)
-                    self.writer.add_scalar('Reward/velocity/mean', np.mean(log_value[:, 1]), step)
-                    # self.writer.add_scalar('Reward/velocity/std', np.std(log_value[:, 1]), step)
-                    self.writer.add_scalar('Reward/height/mean', np.mean(log_value[:, 2]), step)
-                    self.writer.add_scalar('Reward/orientation/mean', np.mean(log_value[:, 3]), step)
-                    # self.writer.add_scalar('Reward/LegWorkEntropy/mean', np.mean(log_value[:, 4]), step)
-                    # self.writer.add_scalar('Reward/uncontactPenalty/mean', np.mean(log_value[:, 5]), step)
-                    # self.writer.add_scalar('Reward/GRF_entropy/mean', np.mean(log_value[:, 4]), step)
-                    # self.writer.add_scalar('Reward/GRF_entropy/std', np.std(log_value[:, 2]), step)
-                    # self.writer.add_scalar('Reward/impulse/mean', np.mean(log_value[:, 5]), step)
+                    self.writer.add_scalar('Reward/joint_torque/mean', np.mean(log_value[:, 0]), step)
+                    self.writer.add_scalar('Reward/linear_vel_error/mean', np.mean(log_value[:, 1]), step)
+                    self.writer.add_scalar('Reward/angular_vel_error/mean', np.mean(log_value[:, 2]), step)
+                    self.writer.add_scalar('Reward/foot_clearance/mean', np.mean(log_value[:, 3]), step)
+                    self.writer.add_scalar('Reward/foot_slip/mean', np.mean(log_value[:, 4]), step)
+                    self.writer.add_scalar('Reward/foot_z_vel/mean', np.mean(log_value[:, 5]), step)
+                    self.writer.add_scalar('Reward/joint_vel/mean', np.mean(log_value[:, 6]), step)
+                    self.writer.add_scalar('Reward/previous_action_smooth/mean', np.mean(log_value[:, 7]), step)
+                    self.writer.add_scalar('Reward/orientation/mean', np.mean(log_value[:, 8]), step)
+                    self.writer.add_scalar('Reward/leg_phase/mean', np.mean(log_value[:, 9]), step)
+                    self.writer.add_scalar('Reward/height/mean', np.mean(log_value[:, 10]), step)
+                    self.writer.add_scalar('cost_scale/mean', np.mean(log_value[:, 11]), step)
                 elif type == 'action':
                     # Architecture 5
-                    self.writer.add_scalar('CPG_tranform/Thigh_amplitude/mean', np.mean(log_value[:, 0]), step)
-                    self.writer.add_scalar('CPG_tranform/Thigh_shaft/mean', np.mean(log_value[:, 1]), step)
-                    self.writer.add_scalar('CPG_tranform/FR_calf/mean', np.mean(log_value[:, 2]), step)
-                    self.writer.add_scalar('CPG_tranform/FL_calf/mean', np.mean(log_value[:, 3]), step)
-                    self.writer.add_scalar('CPG_tranform/RR_calf/mean', np.mean(log_value[:, 4]), step)
-                    self.writer.add_scalar('CPG_tranform/RL_calf/mean', np.mean(log_value[:, 5]), step)
-
-
-                """
-                # Architecture 4
-                # amplitude
-                self.writer.add_scalar('CPG_tranform/FR_amplitude/mean', np.mean(log_value[:, 0]), step)
-                # self.writer.add_scalar('CPG_tranform/FR_amplitude/std', np.std(log_value[:, 0]), step)
-                self.writer.add_scalar('CPG_tranform/FL_amplitude/mean', np.mean(log_value[:, 1]), step)
-                # self.writer.add_scalar('CPG_tranform/FL_amplitude/std', np.std(log_value[:, 1]), step)
-                self.writer.add_scalar('CPG_tranform/RR_amplitude/mean', np.mean(log_value[:, 2]), step)
-                # self.writer.add_scalar('CPG_tranform/RR_amplitude/std', np.std(log_value[:, 2]), step)
-                self.writer.add_scalar('CPG_tranform/RL_amplitude/mean', np.mean(log_value[:, 3]), step)
-                # self.writer.add_scalar('CPG_tranform/RL_amplitude/std', np.std(log_value[:, 3]), step)
-
-                # shaft position
-                self.writer.add_scalar('CPG_tranform/FR_shaft/mean', np.mean(log_value[:, 4]), step)
-                # self.writer.add_scalar('CPG_tranform/FR_shaft/std', np.std(log_value[:, 4]), step)
-                self.writer.add_scalar('CPG_tranform/FL_shaft/mean', np.mean(log_value[:, 5]), step)
-                # self.writer.add_scalar('CPG_tranform/FL_shaft/std', np.std(log_value[:, 5]), step)
-                self.writer.add_scalar('CPG_tranform/RR_shaft/mean', np.mean(log_value[:, 6]), step)
-                # self.writer.add_scalar('CPG_tranform/RR_shaft/std', np.std(log_value[:, 6]), step)
-                self.writer.add_scalar('CPG_tranform/RL_shaft/mean', np.mean(log_value[:, 7]), step)
-                # self.writer.add_scalar('CPG_tranform/RL_shaft/std', np.std(log_value[:, 7]), step)
-                """
-
+                    self.writer.add_scalar('FR_thigh/mean', np.mean(log_value[:, 0]), step)
+                    self.writer.add_scalar('FR_calf/mean', np.mean(log_value[:, 1]), step)
+                    self.writer.add_scalar('FL_thigh/mean', np.mean(log_value[:, 2]), step)
+                    self.writer.add_scalar('FL_calf/mean', np.mean(log_value[:, 3]), step)
+                    self.writer.add_scalar('RR_thigh/mean', np.mean(log_value[:, 4]), step)
+                    self.writer.add_scalar('RR_calf/mean', np.mean(log_value[:, 5]), step)
+                    self.writer.add_scalar('RL_thigh/mean', np.mean(log_value[:, 6]), step)
+                    self.writer.add_scalar('RL_calf/mean', np.mean(log_value[:, 7]), step)
 
         elif self.logger == 'wandb':
             if type == 'reward':

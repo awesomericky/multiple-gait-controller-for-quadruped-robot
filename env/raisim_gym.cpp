@@ -45,6 +45,8 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def("increase_cost_scale", &VectorizedEnvironment<ENVIRONMENT>::increase_cost_scale)
     .def("set_leg_phase", &VectorizedEnvironment<ENVIRONMENT>::set_leg_phase)
     .def("set_next_initialize_steps", &VectorizedEnvironment<ENVIRONMENT>::set_next_initialize_steps)
+    .def("get_torque", &VectorizedEnvironment<ENVIRONMENT>::get_torque)
+    .def("get_power", &VectorizedEnvironment<ENVIRONMENT>::get_power)
     .def(py::pickle(
         [](const VectorizedEnvironment<ENVIRONMENT> &p) { // __getstate__ --> Pickling to Python
             /* Return a tuple that fully encodes the state of the object */

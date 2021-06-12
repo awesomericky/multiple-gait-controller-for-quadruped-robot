@@ -127,6 +127,18 @@ class VectorizedEnvironment {
       environments_[i]->set_next_initialize_steps(next_initialize_steps[i]);
   }
 
+  void get_torque(Eigen::Ref<EigenRowMajorMat> &torque_data) {
+#pragma omp parallel for
+    for (int i = 0; i < num_envs_; i++)
+      environments_[i]->get_torque(torque_data.row(i));
+  }
+
+  void get_power(Eigen::Ref<EigenRowMajorMat> &power_data) {
+#pragma omp parallel for
+    for (int i = 0; i < num_envs_; i++)
+      environments_[i]->get_power(power_data.row(i));
+  }
+
   void turnOnVisualization() { if(render_) environments_[0]->turnOnVisualization(); }
   void turnOffVisualization() { if(render_) environments_[0]->turnOffVisualization(); }
   void startRecordingVideo(const std::string& videoName) { if(render_) environments_[0]->startRecordingVideo(videoName); }

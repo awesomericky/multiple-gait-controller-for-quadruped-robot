@@ -410,6 +410,16 @@ namespace raisim
             next_initialize_n_state = next_initialize_steps;
         }
 
+        void get_torque(Eigen::Ref<EigenVec> torque_data)
+        {
+            torque_data[0] = torque.tail(8).norm();
+        }
+
+        void get_power(Eigen::Ref<EigenVec> power_data)
+        {
+            power_data[0] = ((gv_.tail(8) * torque.tail(8)).array().abs() * control_dt_).sum();
+        }
+
         // void update_initial_state(Eigen::VectorXd current_state)
         // {
         //     next_gc_init_ = current_state;

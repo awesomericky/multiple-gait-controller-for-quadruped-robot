@@ -2,7 +2,7 @@ from ruamel.yaml import YAML, dump, RoundTripDumper, tokens
 from raisimGymTorch.env.bin import multigait_anymal_transfer_2
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
 import raisimGymTorch.algo.ppo.module as ppo_module
-from raisimGymTorch.helper.utils import contact_plotting, CPG_and_velocity_plotting
+from raisimGymTorch.helper.utils import exp_contact_plotting, exp_CPG_and_velocity_plotting
 import os
 import math
 import time
@@ -11,6 +11,7 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import pdb
+import pickle
 
 
 # configuration
@@ -52,7 +53,8 @@ max_vel = cfg['environment']['velocity']['max']
 
 CPG_period = int(cfg['environment']['CPG_control_dt'] / cfg['environment']['control_dt'])  # 5
 # velocity_period = int(cfg['environment']['velocity_sampling_dt'] / cfg['environment']['control_dt'])  # 200
-velocity_period = 300  # sample velocity every 3 sec
+wait_period = 200
+velocity_period = 500  # sample velocity every 3 sec
 
 target_gait_dict = {'pace': [np.pi, 0, np.pi, 0], 'trot': [np.pi, 0, 0, np.pi], 'bound': [np.pi, np.pi, 0, 0]}
 target_gait_phase = np.array(target_gait_dict[cfg['environment']['gait']])
@@ -82,9 +84,9 @@ else:
     env.turn_on_visualization()
 
     # max_steps = 1000000
-    max_steps = 1500 ## 12 secs
+    max_steps = 2500 ## 12 secs
 
-    assert max_steps / velocity_period == 5.0, "Check velocity period"
+    # assert max_steps / velocity_period == 5.0, "Check velocity period"
     count = 0
 
     # initialize value
@@ -101,25 +103,32 @@ else:
     target_velocity_traj = np.zeros((max_steps, ), dtype=np.float32)
     real_velocity_traj = np.zeros((max_steps, ), dtype=np.float32)
 
+    # initialize exp1 data
+    velocity_error_collection = dict()
+    torque_collection = []
+    power_collection = []
+
     for step in range(max_steps):
         frame_start = time.time()
 
         if step % CPG_period == 0:
             if step % velocity_period == 0:
+                data_collection_start = step + wait_period
+                velocity_error = []
+
                 # sample new velocity
                 # normalized_velocity = np.broadcast_to(np.random.uniform(low = 0, high=1, size=1)[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
                 # normalized_velocity = np.broadcast_to(np.array([0])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
                 if count == 0:
-                    normalized_velocity = np.broadcast_to(np.array([0])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                    velocity = np.broadcast_to(np.array([0.3])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
                 elif count == 1:
-                    normalized_velocity = np.broadcast_to(np.array([0.25])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                    velocity = np.broadcast_to(np.array([0.6])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
                 elif count == 2:
-                    normalized_velocity = np.broadcast_to(np.array([0.5])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                    velocity = np.broadcast_to(np.array([0.9])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
                 elif count == 3:
-                    normalized_velocity = np.broadcast_to(np.array([0.75])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
+                    velocity = np.broadcast_to(np.array([1.2])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
                 else:
-                    normalized_velocity = np.broadcast_to(np.array([1])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
-                velocity = normalized_velocity * (max_vel - min_vel) + min_vel
+                    velocity = np.broadcast_to(np.array([1.5])[:, np.newaxis], (training_num_envs, 1)).astype(np.float32)
 
                 env.set_target_velocity(velocity)
                 count += 1
@@ -162,9 +171,21 @@ else:
         wait_time = cfg['environment']['control_dt'] - (frame_end-frame_start)
         if wait_time > 0.:
             time.sleep(wait_time)
-        
-        reward_ll_sum += reward_ll[0]
-        done_sum += dones[0]
+
+        if step in range(data_collection_start, data_collection_start + (velocity_period - wait_period)):
+            real_velocity = non_obs[0, 12]
+            desired_velocity = velocity[0, 0]
+
+            velocity_error.append(abs(real_velocity - desired_velocity))
+
+            current_torque = env.get_torque()[0]
+            current_power = env.get_power()[0]
+            torque_collection.append([real_velocity, current_torque])
+            power_collection.append([real_velocity, current_power])
+
+            if step == data_collection_start + (velocity_period - wait_period) - 1:
+                velocity_error = np.asarray(velocity_error)
+                velocity_error_collection[desired_velocity] = [np.mean(velocity_error), np.std(velocity_error), np.quantile(velocity_error, .25), np.quantile(velocity_error, .50), np.quantile(velocity_error, .75)]
         
         # contact logging
         env.contact_logging()
@@ -174,20 +195,19 @@ else:
         CPG_signal_period_traj[step] = CPG_signal_period[0]
         target_velocity_traj[step] = velocity[0]
         real_velocity_traj[step] = non_obs[0, 12]
-        
-        if dones or step == max_steps - 1:
-            print('----------------------------------------------------')
-            print('{:<40} {:>6}'.format("average ll reward: ", '{:0.10f}'.format(reward_ll_sum / (step + 1 - start_step_id))))
-            print('{:<40} {:>6}'.format("time elapsed [sec]: ", '{:6.4f}'.format((step + 1 - start_step_id) * cfg['environment']['control_dt'])))
-            print('----------------------------------------------------\n')
-            start_step_id = step + 1
-            reward_ll_sum = 0.0
-    
+
+    # save exp1 data
+    torque_collection = np.asarray(torque_collection)
+    power_collection = np.asarray(power_collection)
+    with open(f"raisimGymTorch/exp_result/exp1/vel_error_{cfg['environment']['gait']}.pkl", "wb") as f:
+        pickle.dump(velocity_error_collection, f)
+    np.savez_compressed(f"raisimGymTorch/exp_result/exp1/torque_{cfg['environment']['gait']}", torque=torque_collection)
+    np.savez_compressed(f"raisimGymTorch/exp_result/exp1/power_{cfg['environment']['gait']}", power=power_collection)
 
     # save & plot contact log
-    update = 'test'
-    contact_plotting(update, task_specific_folder_name, contact_log)
-    CPG_and_velocity_plotting(update, task_specific_folder_name, max_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
+    update = cfg['environment']['gait']
+    exp_contact_plotting(update, "raisimGymTorch/exp_result/exp1", contact_log)
+    exp_CPG_and_velocity_plotting(update, "raisimGymTorch/exp_result/exp1", max_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj)
 
     env.turn_off_visualization()
     env.reset()
