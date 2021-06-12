@@ -30,7 +30,7 @@ class Actor:
             actions = torch.clamp(actions, min=0.1, max=1.)  # clipping amplitude (Architecture 5)
             return actions.cpu().detach(), log_prob.cpu().detach()
 
-        elif PPO_type == 'local' or PPO_type == None:
+        elif PPO_type == 'local':
             logits = self.architecture.architecture(obs)
             # logits[:, 0] = torch.relu(logits[:, 0])  # clipping amplitude (Architecture 5)
             logits[:, 0] = torch.relu(logits[:, 0])  # clipping amplitude (Architecture 5)
@@ -41,16 +41,29 @@ class Actor:
             # actions[:, 0] = torch.relu(actions[:, 0])  # clipping amplitude (Architecture 5)
             actions[:, 0] = torch.relu(actions[:, 0])  # clipping amplitude (Architecture 5)
             return actions.cpu().detach(), log_prob.cpu().detach()
+        elif PPO_type == None:
+            logits = self.architecture.architecture(obs)
+            actions, log_prob = self.distribution.sample(logits)
+
+            ## For real action ##
+            return actions.cpu().detach(), log_prob.cpu().detach()
+        else:
+            raise ValueError("Unavailable PPO_type")
 
     def evaluate(self, obs, actions, PPO_type):
         if PPO_type == 'CPG':
             action_mean = self.architecture.architecture(obs)
             return self.distribution.evaluate(obs, action_mean, actions)
-        elif PPO_type == 'local' or PPO_type == None:
+        elif PPO_type == 'local':
             action_mean = self.architecture.architecture(obs)
             action_mean_clipped = torch.cat((torch.relu(action_mean[:, 0]).unsqueeze(-1), action_mean[:, 1:]), dim=1)  # clipping amplitude & shaft & calf (Architecture 5)
             return self.distribution.evaluate(obs, action_mean_clipped, actions)  # clipping amplitude (Architecture 4, 5)
             # return self.distribution.evaluate(obs, action_mean, actions)
+        elif PPO_type == None:
+            action_mean = self.architecture.architecture(obs)
+            return self.distribution.evaluate(obs, action_mean, actions)
+        else:
+            raise ValueError("Unavailable PPO_type")
     
     def inference(self, obs, PPO_type):
         if PPO_type == 'CPG':
@@ -61,7 +74,11 @@ class Actor:
             # action_mean[:, 0] = torch.relu(action_mean[:, 0])  # clipping amplitude (Architecture 5)
             action_mean[:, 0] = torch.relu(action_mean[:, 0])  # clipping amplitude (Architecture 5)
             return action_mean.cpu().detach()
-        
+        elif PPO_type == None:
+            action_mean = self.architecture.architecture(obs)
+            return action_mean.cpu().detach()
+        else:
+            raise ValueError("Unavailable PPO_type")
 
     def parameters(self):
         return [*self.architecture.parameters(), *self.distribution.parameters()]

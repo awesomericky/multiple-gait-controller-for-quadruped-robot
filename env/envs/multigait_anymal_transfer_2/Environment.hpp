@@ -393,8 +393,8 @@ namespace raisim
 
             Eigen::Vector3d identityRot(0,0,1);
             orientationCost = costScale_ * 100.0 * (pitch_and_yaw - identityRot).norm() * simulation_dt_;
-
-            cost = torqueCost + linvelCost + angVelCost + footClearanceCost + velLimitCost + slipCost + previousActionCost + orientationCost + footVelCost + leg_phase_cost; //  ;
+            // cost = torqueCost + linvelCost + angVelCost + footClearanceCost + velLimitCost + slipCost + previousActionCost + orientationCost + footVelCost + leg_phase_cost; //  ;
+	    cost = linvelCost;
 
         }
 

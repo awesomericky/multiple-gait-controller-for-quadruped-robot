@@ -127,7 +127,7 @@ CPG_ppo = PPO.PPO(actor=CPG_actor,
                   num_envs=cfg['environment']['num_envs'],
                   num_transitions_per_env=n_CPG_steps,
                   num_learning_epochs=4,
-                  gamma=0.996,
+                  gamma=0.99,
                   lam=0.95,
                   num_mini_batches=4,
                   PPO_type='CPG',
@@ -142,7 +142,7 @@ ppo = PPO.PPO(actor=actor,
               num_envs=cfg['environment']['num_envs'],
               num_transitions_per_env=n_steps,
               num_learning_epochs=4,
-              gamma=0.996,
+              gamma=0.99,
               lam=0.95,
               num_mini_batches=4,
               PPO_type='local',
@@ -323,6 +323,12 @@ for update in range(iteration_number, 10000):
             env_action[:, [0, 2, 4, 6]] = action_ll[:, 0][:, np.newaxis] * CPG_signal[:, :, step]
             env_action[:, [1, 3, 5, 7]] = action_ll[:, 1:]
             reward_ll, dones = env.step(env_action)
+
+            """
+            # compute reward for each velocity period
+            if (step+1) % velocity_period == 0:
+                dones[:] = 1
+            """    
             frame_end = time.time()
             wait_time = cfg['environment']['control_dt'] - (frame_end-frame_start)
             if wait_time > 0.:
@@ -428,8 +434,14 @@ for update in range(iteration_number, 10000):
 
         reward, dones = env.step(env_action)
 
+        """
+        # compute reward for each velocity period
+        if (step+1) % velocity_period == 0:
+            dones[:] = 1
+        """
         env.get_CPG_reward()
         temp_CPG_rewards = env._CPG_reward
+        # temp_CPG_rewards = reward
         CPG_rewards += (temp_CPG_rewards * (1 - dones))[:, np.newaxis]
         CPG_not_dones *= (1 - dones)
         ppo.step(value_obs=obs, rews=reward, dones=dones)
@@ -491,7 +503,7 @@ for update in range(iteration_number, 10000):
     end = time.time()
 
     # increase cost (curriculum learning)
-    # env.increase_cost_scale()
+    env.increase_cost_scale()
 
     print('----------------------------------------------------')
     print('{:>6}th iteration'.format(update))

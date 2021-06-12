@@ -429,7 +429,7 @@ namespace raisim
         }
 
         void increase_cost_scale() {
-            costScale_ = std::pow(costScale_, 0.997);
+            costScale_ = std::pow(costScale_, 0.999);
         }
 
     private:

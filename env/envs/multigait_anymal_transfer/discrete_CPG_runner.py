@@ -73,7 +73,7 @@ task_specific_folder_name = f"{cfg['environment']['gait']}_{cfg['environment']['
 env = VecEnv(multigait_anymal_transfer.RaisimGymEnv(home_path + "/rsc",
              dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
 
-target_gait_dict = {'pace': [np.pi, 0, np.pi, 0], 'trot': [np.pi, 0, 0, np.pi], 'bound': [np.pi, np.pi, 0, 0]}
+target_gait_dict = {'walk': [0, np.pi, 1.5 * np.pi, 0.5 * np.pi], 'pace': [np.pi, 0, np.pi, 0], 'trot': [np.pi, 0, 0, np.pi], 'bound': [np.pi, np.pi, 0, 0]}
 
 # shortcuts
 ob_dim = env.num_obs  # 26 (w/ HAA joints fixed)
@@ -129,7 +129,7 @@ CPG_ppo = PPO.PPO(actor=CPG_actor,
                   num_learning_epochs=4,
                   gamma=0.996,
                   lam=0.95,
-                  num_mini_batches=8,
+                  num_mini_batches=4,
                   PPO_type='CPG',
                   device=device,
                   log_dir=saver.data_dir,
@@ -144,7 +144,7 @@ ppo = PPO.PPO(actor=actor,
               num_learning_epochs=4,
               gamma=0.996,
               lam=0.95,
-              num_mini_batches=8,
+              num_mini_batches=4,
               PPO_type='local',
               device=device,
               log_dir=saver.data_dir,
@@ -428,8 +428,9 @@ for update in range(iteration_number, 10000):
 
         reward, dones = env.step(env_action)
 
-        env.get_CPG_reward()
-        temp_CPG_rewards = env._CPG_reward
+        # env.get_CPG_reward()
+        # temp_CPG_rewards = env._CPG_reward
+        temp_CPG_rewards = reward
         CPG_rewards += (temp_CPG_rewards * (1 - dones))[:, np.newaxis]
         CPG_not_dones *= (1 - dones)
         ppo.step(value_obs=obs, rews=reward, dones=dones)
