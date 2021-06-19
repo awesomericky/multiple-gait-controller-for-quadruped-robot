@@ -41,10 +41,10 @@ def compute_phase(previous_CPG, current_CPG):
     """
     return np.where(current_CPG - previous_CPG >= 0, 1, 0).astype(np.float32)
 
-# target_gait_dict = np.array([[np.pi, 0, 0, np.pi], [np.pi, 0, np.pi, 0], [np.pi, np.pi, 0, 0]])
+target_gait_dict = np.array([[np.pi, 0, 0, np.pi], [np.pi, 0, np.pi, 0], [np.pi, np.pi, 0, 0]])
 # 0 : trot, 1: pace, 2: bound
 
-target_gait_dict = np.array([[0, np.pi, 1.5 * np.pi, 0.5 * np.pi], [0, np.pi, 0, np.pi], [0, 0, np.pi, np.pi]])
+# target_gait_dict = np.array([[0, np.pi, 1.5 * np.pi, 0.5 * np.pi], [0, np.pi, 0, np.pi], [0, 0, np.pi, np.pi]])
 # 0 : walk, 1: pace, 2: bound
 
 def compute_target_gait_phase(velocity):

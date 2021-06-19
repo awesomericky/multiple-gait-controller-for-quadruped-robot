@@ -38,7 +38,7 @@ environment:
     orientation:
       coeff: 1.
     leg_phase:
-      coeff: 3.
+      coeff: 2.
     height:
       threshold: 0.07 # penalty only given if the height is out of threhold
       coeff: 0.0 #0.3
