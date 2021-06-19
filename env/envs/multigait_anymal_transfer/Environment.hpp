@@ -299,7 +299,7 @@ namespace raisim
 
                         // check foot height to distinguish shank contact
                         // TODO: this only works for flat terrain
-                        if (idx == 2 && footPos_W[0][2] < 0.022 && !footContactState_[0])
+                        if (idx == 2 && footPos_W[0][2] < 0.05 && !footContactState_[0])
                         {
                             footContactState_[0] = true;
                             // footNormal_[0] = anymal_->getContacts()[k].getNormal().e();
@@ -308,7 +308,7 @@ namespace raisim
                             numFootContact_++;
                             GRF_impulse[0] = anymal_->getContacts()[k].getImpulse()->e().squaredNorm();
                         }
-                        else if (idx == 4 && footPos_W[1][2] < 0.022 && !footContactState_[1])
+                        else if (idx == 4 && footPos_W[1][2] < 0.05 && !footContactState_[1])
                         {
                             footContactState_[1] = true;
                             // footNormal_[1] = anymal_->getContacts()[k].getNormal().e();
@@ -317,7 +317,7 @@ namespace raisim
                             numFootContact_++;
                             GRF_impulse[1] = anymal_->getContacts()[k].getImpulse()->e().squaredNorm();
                         }
-                        else if (idx == 6 && footPos_W[2][2] < 0.022 && !footContactState_[2])
+                        else if (idx == 6 && footPos_W[2][2] < 0.05 && !footContactState_[2])
                         {
                             footContactState_[2] = true;
                             // footNormal_[2] = anymal_->getContacts()[k].getNormal().e();
@@ -326,7 +326,7 @@ namespace raisim
                             numFootContact_++;
                             GRF_impulse[2] = anymal_->getContacts()[k].getImpulse()->e().squaredNorm();
                         }
-                        else if (idx == 8 && footPos_W[3][2] < 0.022 && !footContactState_[3])
+                        else if (idx == 8 && footPos_W[3][2] < 0.05 && !footContactState_[3])
                         {
                             footContactState_[3] = true;
                             // footNormal_[3] = anymal_->getContacts()[k].getNormal().e();

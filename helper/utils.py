@@ -108,10 +108,12 @@ def CPG_and_velocity_plotting(update, folder_name, n_steps, CPG_signal_period_tr
     check_saving_folder(final_folder_name)
 
     time_axis = np.arange(n_steps) * 0.01
+    plt.plot(time_axis, target_velocity_traj, ls='--', color='black', label='command velocity')
+    plt.plot(time_axis, real_velocity_traj, color='blue', label='measured velocity')
+
     if type == 'CPG':
-        plt.plot(time_axis, CPG_signal_period_traj, label='CPG_period')
-    plt.plot(time_axis, target_velocity_traj, label='target_velocity')
-    plt.plot(time_axis, real_velocity_traj, label='real_velocity')
+        plt.plot(time_axis, CPG_signal_period_traj, color='red', label='CPG period')
+
     plt.title('CPG and velocity', fontsize=20)
     plt.xlabel('time [s]')
     plt.legend()
@@ -136,21 +138,50 @@ def exp_contact_plotting(update, folder_name, contact_log):
     ax.set_yticklabels(y_label_list)
     fig.colorbar(img)
     ax.set_title('contact', fontsize=20)
-    ax.set_xlabel('time [s]')
+    ax.set_xlabel('Time [s]')
     plt.savefig(f'{folder_name}/contact_{update}.png')
     plt.clf()
     plt.close()
 
+# def exp_CPG_and_velocity_plotting(update, folder_name, n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj, type='CPG'):
+
+#     time_axis = np.arange(n_steps) * 0.01
+
+#     fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(15, 5))
+#     ax[0].plot(time_axis, target_velocity_traj, color='black', label='command velocity')
+#     ax[0].plot(time_axis, real_velocity_traj, color='red', label='measured velocity')
+
+#     if type == 'CPG':
+#         ax[1].plot(time_axis, CPG_signal_period_traj, color='red', label='CPG period')
+
+#     ax[0].set_xlabel('Time [s]', fontsize=12)
+#     ax[0].set_ylabel('Velocity [m/s]', fontsize=12)
+#     ax[1].set_xlabel('Time [s]', fontsize=12)
+#     ax[1].set_ylabel('Period [s]', fontsize=12)
+#     ax[0].legend()
+#     ax[1].legend()
+#     plt.savefig(f'{folder_name}/CPG_vel_{update}.png')
+#     plt.clf()
+#     plt.close()
+
 def exp_CPG_and_velocity_plotting(update, folder_name, n_steps, CPG_signal_period_traj, target_velocity_traj, real_velocity_traj, type='CPG'):
 
     time_axis = np.arange(n_steps) * 0.01
-    if type == 'CPG':
-        plt.plot(time_axis, CPG_signal_period_traj, label='CPG_period')
-    plt.plot(time_axis, target_velocity_traj, label='target_velocity')
-    plt.plot(time_axis, real_velocity_traj, label='real_velocity')
-    plt.title('CPG and velocity', fontsize=20)
-    plt.xlabel('time [s]')
+
+    plt.plot(time_axis, target_velocity_traj, color='blue', label='command velocity')
+    plt.plot(time_axis, real_velocity_traj, color='red', label='measured velocity')
+    plt.xlabel('Time [s]', fontsize=12)
+    plt.ylabel('Velocity [m/s]', fontsize=12)
     plt.legend()
-    plt.savefig(f'{folder_name}/CPG_vel_{update}.png')
+    plt.savefig(f'{folder_name}/vel_{update}.png')
     plt.clf()
     plt.close()
+
+    if type == 'CPG':
+        plt.plot(time_axis, CPG_signal_period_traj, color='red', label='CPG period')
+        plt.xlabel('Time [s]', fontsize=12)
+        plt.ylabel('Period [s]', fontsize=12)
+        plt.legend()
+        plt.savefig(f'{folder_name}/CPG_{update}.png')
+        plt.clf()
+        plt.close()

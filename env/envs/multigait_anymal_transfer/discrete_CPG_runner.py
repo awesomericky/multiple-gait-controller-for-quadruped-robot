@@ -73,7 +73,7 @@ task_specific_folder_name = f"{cfg['environment']['gait']}_{cfg['environment']['
 env = VecEnv(multigait_anymal_transfer.RaisimGymEnv(home_path + "/rsc",
              dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
 
-target_gait_dict = {'pace': [np.pi, 0, np.pi, 0], 'trot': [np.pi, 0, 0, np.pi], 'bound': [np.pi, np.pi, 0, 0]}
+target_gait_dict = {'walk': [0, np.pi, 1.5 * np.pi, 0.5 * np.pi], 'pace': [np.pi, 0, np.pi, 0], 'trot': [np.pi, 0, 0, np.pi], 'bound': [np.pi, np.pi, 0, 0]}
 
 # shortcuts
 ob_dim = env.num_obs  # 26 (w/ HAA joints fixed)

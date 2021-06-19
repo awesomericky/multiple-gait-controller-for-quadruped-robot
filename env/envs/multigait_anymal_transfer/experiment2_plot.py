@@ -3,25 +3,26 @@ import matplotlib.pyplot as plt
 import pickle
 
 gaits = ['baseline', 'hierarchy']
+color = ['black', 'red']
 
 # Plot linear velocity error
-for gait in gaits:
+for k, gait in enumerate(gaits):
     with open(f"raisimGymTorch/exp_result/exp2/vel_error_{gait}.pkl", "rb") as f:
         velocity_error_collection = pickle.load(f)
         command_vel = list(velocity_error_collection.keys())
         vel_error_mean = np.array(list(velocity_error_collection.values()))[:, 0]
-        vel_error_std = np.array(list(velocity_error_collection.values()))[:, 1]
-        plt.errorbar(command_vel, vel_error_mean, yerr=vel_error_std, label=gait)
-plt.title('Velocity error')
+        # vel_error_std = np.array(list(velocity_error_collection.values()))[:, 1]
+        plt.plot(command_vel, vel_error_mean, color=color[k], label=gait)
 plt.xlabel('Command velocity [m/s]')
 plt.ylabel('Velocity error [m/s]')
 plt.legend()
+plt.grid(True)
 plt.savefig('raisimGymTorch/exp_result/exp2/velocity_error.png')
 plt.clf()
 plt.close()
 
 # Plot torque
-for gait in gaits:
+for k, gait in enumerate(gaits):
     torque_collection = np.load(f"raisimGymTorch/exp_result/exp2/torque_{gait}.npz")['torque']
 
     range_1 = []; range_2 = []; range_3 = []; range_4 = []; range_5 = []; range_6 = []; range_7 = []; range_8 = [];
@@ -61,17 +62,17 @@ for gait in gaits:
     if None in candidate_vel:
         candidate_vel.remove(None)
     candidate_vel = sorted(candidate_vel)
-    plt.errorbar(candidate_vel, torque_mean, yerr=torque_std, label=gait)
-plt.title('Torque')
+    plt.plot(candidate_vel, torque_mean, color=color[k], label=gait)
 plt.xlabel('Measured velocity [m/s]')
 plt.ylabel('Torque [Nm]')
 plt.legend()
+plt.grid(True)
 plt.savefig('raisimGymTorch/exp_result/exp2/torque.png')
 plt.clf()
 plt.close()
 
 # Plot Energy
-for gait in gaits:
+for k, gait in enumerate(gaits):
     power_collection = np.load(f"raisimGymTorch/exp_result/exp2/power_{gait}.npz")['power']
 
     range_1 = []; range_2 = []; range_3 = []; range_4 = []; range_5 = []; range_6 = []; range_7 = []; range_8 = [];
@@ -111,11 +112,11 @@ for gait in gaits:
     if None in candidate_vel:
         candidate_vel.remove(None)
     candidate_vel = sorted(candidate_vel)
-    plt.errorbar(candidate_vel, power_mean, yerr=power_std, label=gait)
-plt.title('Energy')
+    plt.plot(candidate_vel, power_mean, color=color[k], label=gait)
 plt.xlabel('Measured velocity [m/s]')
 plt.ylabel('Energy [W]')
 plt.legend()
+plt.grid(True)
 plt.savefig('raisimGymTorch/exp_result/exp2/energy.png')
 plt.clf()
 plt.close()

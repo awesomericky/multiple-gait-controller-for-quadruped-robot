@@ -54,7 +54,7 @@ CPG_period = int(cfg['environment']['CPG_control_dt'] / cfg['environment']['cont
 # velocity_period = int(cfg['environment']['velocity_sampling_dt'] / cfg['environment']['control_dt'])  # 200
 velocity_period = 300  # sample velocity every 3 sec
 
-target_gait_dict = {'pace': [np.pi, 0, np.pi, 0], 'trot': [np.pi, 0, 0, np.pi], 'bound': [np.pi, np.pi, 0, 0]}
+target_gait_dict = {'walk': [0, np.pi, 1.5 * np.pi, 0.5 * np.pi], 'pace': [np.pi, 0, np.pi, 0], 'trot': [np.pi, 0, 0, np.pi], 'bound': [np.pi, np.pi, 0, 0]}
 target_gait_phase = np.array(target_gait_dict[cfg['environment']['gait']])
 
 iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
