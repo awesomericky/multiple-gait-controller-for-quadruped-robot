@@ -22,7 +22,7 @@ Therefore, for the people who saw this repository, just consider that there is s
 <img width=300 src='video/pace.gif'>
 3. Bound (imperfect)
 <img width=300 src='video/bound.gif'>
-4. Multiple gait in a single policy (Trot & Bound)
+4. Multiple gaits in a single policy (Pace & Bound)
 <img width=300 src='video/multiple_gait.gif'>
 
 # Further materials
