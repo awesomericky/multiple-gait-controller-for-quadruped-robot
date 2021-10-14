@@ -18,8 +18,12 @@ Therefore, for the people who saw this repository, just consider that there is s
 # Result
 1. Trot
 <img width=300 src='video/trot.gif'>
-3. Pace
-4. Bound (imperfect)
+2. Pace
+<img width=300 src='video/pace.gif'>
+3. Bound (imperfect)
+<img width=300 src='video/bound.gif'>
+4. Multiple gait in a single policy (Trot & Bound)
+<img width=300 src='video/multiple_gait.gif'>
 
 # Further materials
 
