@@ -1,4 +1,4 @@
-# Multigait controller
+# Learning multiple gaits of quadruped robot using hierarchical reinforcement learning
 
 We propose a method to learn multiple gaits of quadruped robot using hierarchical reinforcement learning. We designed a hierarchical controller and a learning framework that could learn and show multiple gaits in a single policy. Every experiment was done in RAISIM simulator.
 
@@ -11,6 +11,9 @@ In the project paper, we held a analysis of energy usage and concluded that opti
 Therefore, for the people who saw this repository, just consider that there is such a way to learn multiple gaits of quadruped robot (**Don't take the energy analysis seriously.**)
 
 # Method
+<div>
+  <img width=300 src='hierarchical_controller.png'>
+</div>
 
 # Result
 
