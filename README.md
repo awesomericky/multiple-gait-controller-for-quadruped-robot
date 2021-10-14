@@ -16,6 +16,10 @@ Therefore, for the people who saw this repository, just consider that there is s
 </div>
 
 # Result
+1. Trot
+<img width=300 src='video/trot.gif'>
+3. Pace
+4. Bound (imperfect)
 
 # Further materials
 
