@@ -15,7 +15,7 @@ Therefore, for the people who saw this repository, just consider that there is s
   <img width=600 src='hierarchical_controller.png'>
 </div>
 
-# Results
+# Result
 1. Trot
 <img width=300 src='video/trot.gif'>
 2. Pace
