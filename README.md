@@ -15,7 +15,7 @@ Therefore, for the people who saw this repository, just consider that there is s
   <img width=600 src='hierarchical_controller.png'>
 </div>
 
-# Result
+# Results
 1. Trot
 <img width=300 src='video/trot.gif'>
 2. Pace
@@ -26,6 +26,5 @@ Therefore, for the people who saw this repository, just consider that there is s
 <img width=300 src='video/multiple_gait.gif'>
 
 # Further materials
-
-Project report: https://bit.ly/3mPlMqB
-Project slides: https://bit.ly/3ADOjV1
+- Project report: https://bit.ly/3mPlMqB
+- Project slides: https://bit.ly/3ADOjV1
