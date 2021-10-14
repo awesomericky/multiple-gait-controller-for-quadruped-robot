@@ -12,7 +12,7 @@ Therefore, for the people who saw this repository, just consider that there is s
 
 # Method
 <div>
-  <img width=300 src='hierarchical_controller.png'>
+  <img width=500 src='hierarchical_controller.png'>
 </div>
 
 # Result
