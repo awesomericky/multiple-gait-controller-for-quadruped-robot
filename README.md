@@ -24,7 +24,7 @@ Using our method, quadruped robot can learn multiple gaits including Trot, Pace,
 
 # Cite
 ```
-@inproceedings{zhang2020ssen,
+@inproceedings{kim2021multiplegait,
     author = {Yunho Kim},
     title = "{Learning multiple gaits of quadruped robot using hierarchical reinforcement learning}",
     booktitle={},
