@@ -4,7 +4,7 @@ We propose a method to learn multiple gaits of quadruped robot using hierarchica
 
 Using our method, quadruped robot can learn multiple gaits including Trot, Pace, and Bound(imperfect). We further successfully learned multiple gait in a single policy using our framework. To show the existence of optimal gaits for specific velocity range, we held an analysis of mechanical energy usage for each learned gaits. Check the paper for detailed results.
 
-- Project report: https://bit.ly/3mPlMqB
+- Paper: https://arxiv.org/submit/4067120
 - Project slides: https://bit.ly/3ADOjV1
 
 # Method
@@ -27,7 +27,7 @@ Using our method, quadruped robot can learn multiple gaits including Trot, Pace,
 @inproceedings{kim2021multiplegait,
     author = {Yunho Kim, Bukun Son, and Dongjun Lee},
     title = {Learning multiple gaits of quadruped robot using hierarchical reinforcement learning},
-    booktitle={},
+    booktitle={https://arxiv.org/submit/4067120},
     year={2021}
 }
 ```
